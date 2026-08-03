@@ -7,16 +7,17 @@
 // Iteration 2b: notifications — one-way webhook channels (Slack/Discord/generic),
 //   no email dependency required.
 // Iteration 2c: invites — shareable-link onboarding, no email dependency required.
-// Iteration 3: annotations — comments on a Song, Track, or Take, timestamped or general.
+// Iteration 3: annotations — comments on a Song, Track, Take, or Mix, timestamped or general.
+// Iteration 4: mixes — Mix, MixComponent (the frozen per-track manifest),
+//   Song.currentMixId; Approval and Annotation widened to also cover Mixes.
 // NOT yet modeled (coming in later iterations):
-//   - Mix (song-level stereo version + manifest of which takes it used)
 //   - Todo (project/song/track-scoped to-dos)
 //   - AuditLog (freeze/unfreeze/approval/download history)
 // ============================================================
 
 datasource db {
   provider = "postgresql" // primary target: Render's managed Postgres
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
   // Pinned to Prisma 6 deliberately — Prisma 7 moved this url into a separate
   // prisma.config.ts file, but has an open, unresolved bug where migrate dev/deploy
   // fails to read it even when correctly set. See SETUP.md for details.
@@ -62,6 +63,7 @@ model User {
 
   uploadedTakes  Take[] @relation("UploadedBy")
   performedTakes Take[] @relation("PerformedBy")
+  uploadedMixes  Mix[]  @relation("UploadedMix")
 
   memberships       Membership[]
   songRoleOverrides SongRoleOverride[]
@@ -96,7 +98,13 @@ model Song {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
+  // Mirrors Track.currentTakeId — same nullable-FK trick, same reason:
+  // breaks the Song<->Mix insert cycle, never observably null in the UI.
+  currentMixId String? @unique
+  currentMix   Mix?    @relation("CurrentMix", fields: [currentMixId], references: [id])
+
   tracks            Track[]
+  mixes             Mix[]
   songRoleOverrides SongRoleOverride[]
   unfreezeRequests  UnfreezeRequest[]
   annotations       Annotation[]
@@ -118,6 +126,7 @@ model Track {
 
   takes Take[] @relation("TrackTakes")
   annotations Annotation[]
+  mixComponents MixComponent[]
 }
 
 model Take {
@@ -145,17 +154,18 @@ model Take {
 
   approvals Approval[]
   annotations Annotation[]
+  mixComponents MixComponent[]
 
   @@unique([trackId, takeNumber])
 }
 
 // ============================================================
 // Iteration 3: annotations
-// A comment can attach to a Song, a Track, or a Take — exactly one of the three.
-// That "exactly one" rule isn't something Postgres or MySQL can both enforce
-// portably via a single constraint, so it's enforced in application code instead.
-// timestampSeconds is only meaningful when takeId is set (a point in that take's
-// audio) — a general comment on a song or track just leaves it null.
+// A comment can attach to a Song, a Track, a Take, or a Mix — exactly one of
+// the four. That "exactly one" rule isn't something Postgres or MySQL can both
+// enforce portably via a single constraint, so it's enforced in application
+// code instead. timestampSeconds is only meaningful when takeId is set (a
+// point in that take's audio) — everything else just leaves it null.
 // ============================================================
 
 model Annotation {
@@ -170,6 +180,8 @@ model Annotation {
   track   Track?  @relation(fields: [trackId], references: [id])
   takeId  String?
   take    Take?   @relation(fields: [takeId], references: [id])
+  mixId   String?
+  mix     Mix?    @relation(fields: [mixId], references: [id])
 
   timestampSeconds Float? // only meaningful when takeId is set
 
@@ -215,18 +227,23 @@ model SongRoleOverride {
   @@unique([userId, songId])
 }
 
-// One person's sign-off on one specific Take. Scoped to the Take (not the Track)
-// so a fresh take starts with zero approvals, while an untouched take keeps the
-// approvals it already had — this is what makes partial re-approval work.
+// One person's sign-off on one specific Take or Mix — exactly one of the two,
+// enforced in app code, same pattern as Annotation. Scoped to the specific Take
+// (not the Track) so a fresh take starts with zero approvals, while an untouched
+// take keeps the approvals it already had — this is what makes partial
+// re-approval work. Same logic applies to a Mix versus its Song.
 model Approval {
   id        String   @id @default(cuid())
-  takeId    String
-  take      Take     @relation(fields: [takeId], references: [id])
+  takeId    String?
+  take      Take?    @relation(fields: [takeId], references: [id])
+  mixId     String?
+  mix       Mix?     @relation(fields: [mixId], references: [id])
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
 
   @@unique([takeId, userId])
+  @@unique([mixId, userId])
 }
 
 enum UnfreezeStatus {
@@ -300,4 +317,68 @@ model Invite {
   usedById    String?
   usedBy      User?     @relation("UsedInvite", fields: [usedById], references: [id])
   createdAt   DateTime  @default(now())
+}
+
+// ============================================================
+// Iteration 4: mixes
+// A Mix is a stereo version of a Song. It carries its own manifest
+// (MixComponent) recording exactly which take of each track it was built
+// from — that manifest never changes after creation, even if a track's
+// current default take changes later, so an old mix stays meaningfully
+// reproducible. Mixes go through the same annotate/approve lifecycle as a
+// Take, and Song.currentMixId mirrors Track.currentTakeId.
+//
+// FINAL is permanent for a given Mix row — there's no unfreeze-equivalent
+// that reopens it. Redoing a finished mix means creating a brand-new Mix
+// (the next mixNumber), not reverting this one back to DRAFT.
+//
+// MixComponent doesn't require covering every Track in the Song — a mix can
+// be built before every part exists yet (e.g. before a tambourine track has
+// been added), so a missing MixComponent row for a track just means that
+// track wasn't part of this particular mix.
+// ============================================================
+
+enum MixStatus {
+  DRAFT
+  FINAL // permanent for this row — redoing a mix means a new Mix (next mixNumber), not reverting this one
+}
+
+model Mix {
+  id        String @id @default(cuid())
+  songId    String
+  song      Song   @relation(fields: [songId], references: [id])
+  mixNumber Int    // sequential per song, e.g. "Mix v2" — set by app logic on create
+
+  storageAdapter StorageAdapter
+  storageKey     String
+
+  uploadedById String
+  uploadedBy   User   @relation("UploadedMix", fields: [uploadedById], references: [id])
+
+  status MixStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+
+  components  MixComponent[]
+  approvals   Approval[]
+  annotations Annotation[]
+
+  // Back-reference for the one-to-one "this mix is the current one for its song"
+  currentForSong Song? @relation("CurrentMix")
+
+  @@unique([songId, mixNumber])
+}
+
+// The manifest: one row per track this mix pulled from, pointing at the exact
+// take used — frozen at creation time, never updated afterward.
+model MixComponent {
+  id      String @id @default(cuid())
+  mixId   String
+  mix     Mix    @relation(fields: [mixId], references: [id])
+  trackId String
+  track   Track  @relation(fields: [trackId], references: [id])
+  takeId  String
+  take    Take   @relation(fields: [takeId], references: [id])
+
+  @@unique([mixId, trackId])
 }
