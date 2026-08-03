@@ -16,7 +16,7 @@
 
 datasource db {
   provider = "postgresql" // primary target: Render's managed Postgres
-  url      = env("postgresql://tedhattemer:CP5KLmMyzskcEoN6X2PiJnxyBykE7rzr@dpg-d9oevtoae00c73ba72a0-a/realmusiccollab")
+  url = env("DATABASE_URL")
   // Pinned to Prisma 6 deliberately — Prisma 7 moved this url into a separate
   // prisma.config.ts file, but has an open, unresolved bug where migrate dev/deploy
   // fails to read it even when correctly set. See SETUP.md for details.
