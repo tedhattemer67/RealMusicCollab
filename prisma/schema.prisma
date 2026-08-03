@@ -16,7 +16,10 @@
 
 datasource db {
   provider = "postgresql" // primary target: Render's managed Postgres
-  // Connection URL lives in prisma.config.ts as of Prisma 7 — see SETUP.md.
+  url      = env("DATABASE_URL")
+  // Pinned to Prisma 6 deliberately — Prisma 7 moved this url into a separate
+  // prisma.config.ts file, but has an open, unresolved bug where migrate dev/deploy
+  // fails to read it even when correctly set. See SETUP.md for details.
   // A MySQL variant of this file is used for Dreamhost testing — same models,
   // provider = "mysql" instead, plus setting the database to utf8mb4 before migrating.
 }
