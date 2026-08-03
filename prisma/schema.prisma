@@ -1,0 +1,300 @@
+// ============================================================
+// Music collaboration platform — schema
+// Iteration 1: core entities — Project, Song, Track, Take.
+// Iteration 2: roles — three-tier cascade (User.instanceRole, Membership,
+//   SongRoleOverride), plus Approval and UnfreezeRequest.
+//   No separate "Owner" permission — any Admin can manage accounts instance-wide.
+// Iteration 2b: notifications — one-way webhook channels (Slack/Discord/generic),
+//   no email dependency required.
+// Iteration 2c: invites — shareable-link onboarding, no email dependency required.
+// Iteration 3: annotations — comments on a Song, Track, or Take, timestamped or general.
+// NOT yet modeled (coming in later iterations):
+//   - Mix (song-level stereo version + manifest of which takes it used)
+//   - Todo (project/song/track-scoped to-dos)
+//   - AuditLog (freeze/unfreeze/approval/download history)
+// ============================================================
+
+datasource db {
+  provider = "postgresql" // primary target: Render's managed Postgres
+  url      = env("DATABASE_URL")
+  // A MySQL variant of this file is used for Dreamhost testing — same models,
+  // provider = "mysql" instead, plus setting the database to utf8mb4 before migrating.
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum ProjectKind {
+  SINGLE
+  EP
+  LP
+  OTHER
+}
+
+enum SongStatus {
+  DRAFT
+  FROZEN
+  PENDING_REAPPROVAL
+}
+
+enum StorageAdapter {
+  GOOGLE_DRIVE
+  S3
+  LOCAL
+}
+
+// Minimal stub for now — email/auth fields arrive with the invite flow.
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  // The three-tier role cascade, narrowest wins:
+  //   SongRoleOverride (this song only) > Membership (this project only) > instanceRole (everywhere)
+  // Most people just carry an instanceRole and never need a Membership or override at all —
+  // those two only exist for the rare case where someone's access differs from their default.
+  instanceRole Role
+
+  uploadedTakes  Take[] @relation("UploadedBy")
+  performedTakes Take[] @relation("PerformedBy")
+
+  memberships       Membership[]
+  songRoleOverrides SongRoleOverride[]
+  approvals         Approval[]
+  unfreezeRequested UnfreezeRequest[] @relation("RequestedUnfreeze")
+  unfreezeResolved  UnfreezeRequest[] @relation("ResolvedUnfreeze")
+  createdInvites    Invite[]          @relation("CreatedInvites")
+  usedInvites       Invite[]          @relation("UsedInvite")
+  annotations       Annotation[]
+}
+
+model Project {
+  id        String      @id @default(cuid())
+  name      String
+  caption   String?
+  kind      ProjectKind @default(OTHER) // cosmetic label only — EP/LP/single, not structural
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  songs             Song[]
+  memberships       Membership[]
+  notificationChannels NotificationChannel[]
+  invites           Invite[]
+}
+
+model Song {
+  id        String     @id @default(cuid())
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id])
+  title     String
+  status    SongStatus @default(DRAFT)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tracks            Track[]
+  songRoleOverrides SongRoleOverride[]
+  unfreezeRequests  UnfreezeRequest[]
+  annotations       Annotation[]
+}
+
+model Track {
+  id            String   @id @default(cuid())
+  songId        String
+  song          Song     @relation(fields: [songId], references: [id])
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // The "current default" take. Nullable only to break the Track<->Take insert
+  // cycle at the database level — the app must always create a Track and its
+  // first Take in one transaction, so this is never observably null in the UI.
+  currentTakeId String? @unique
+  currentTake   Take?   @relation("CurrentTake", fields: [currentTakeId], references: [id])
+
+  takes Take[] @relation("TrackTakes")
+  annotations Annotation[]
+}
+
+model Take {
+  id         String         @id @default(cuid())
+  trackId    String
+  track      Track          @relation("TrackTakes", fields: [trackId], references: [id])
+  takeNumber Int            // sequential per track, e.g. "Take 3" — set by app logic on create
+
+  storageAdapter StorageAdapter
+  storageKey     String       // path/key/id within whichever adapter is configured
+
+  performedById String         // required — guests get a Contributor account, never a plain-text name
+  performedBy   User           @relation("PerformedBy", fields: [performedById], references: [id])
+  uploadedById  String
+  uploadedBy    User           @relation("UploadedBy", fields: [uploadedById], references: [id])
+
+  note             String?     // optional take note, entered at upload time
+  recordedOn       DateTime?   // session date, may differ from createdAt
+  readyForFeedback Boolean     @default(true)
+
+  createdAt DateTime @default(now())
+
+  // Back-reference for the one-to-one "this take is the current default for its track"
+  currentForTrack Track? @relation("CurrentTake")
+
+  approvals Approval[]
+  annotations Annotation[]
+
+  @@unique([trackId, takeNumber])
+}
+
+// ============================================================
+// Iteration 3: annotations
+// A comment can attach to a Song, a Track, or a Take — exactly one of the three.
+// That "exactly one" rule isn't something Postgres or MySQL can both enforce
+// portably via a single constraint, so it's enforced in application code instead.
+// timestampSeconds is only meaningful when takeId is set (a point in that take's
+// audio) — a general comment on a song or track just leaves it null.
+// ============================================================
+
+model Annotation {
+  id       String @id @default(cuid())
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  body     String @db.Text
+
+  songId  String?
+  song    Song?   @relation(fields: [songId], references: [id])
+  trackId String?
+  track   Track?  @relation(fields: [trackId], references: [id])
+  takeId  String?
+  take    Take?   @relation(fields: [takeId], references: [id])
+
+  timestampSeconds Float? // only meaningful when takeId is set
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================================
+// Iteration 2: roles, membership, and approvals
+// ============================================================
+
+enum Role {
+  ADMIN
+  CONTRIBUTOR
+  REVIEWER
+  VIEWER
+}
+
+// A per-project role that overrides a user's instanceRole for this project only.
+// Only needed when this project's membership differs from someone's default.
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  role      Role
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+}
+
+// The narrowest, rarest override: a role for one specific song, taking precedence
+// over both the project Membership and the instanceRole for this user on this song only.
+model SongRoleOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  songId    String
+  song      Song     @relation(fields: [songId], references: [id])
+  role      Role
+  createdAt DateTime @default(now())
+
+  @@unique([userId, songId])
+}
+
+// One person's sign-off on one specific Take. Scoped to the Take (not the Track)
+// so a fresh take starts with zero approvals, while an untouched take keeps the
+// approvals it already had — this is what makes partial re-approval work.
+model Approval {
+  id        String   @id @default(cuid())
+  takeId    String
+  take      Take     @relation(fields: [takeId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([takeId, userId])
+}
+
+enum UnfreezeStatus {
+  OPEN
+  APPROVED
+  DENIED
+}
+
+// Tracks a request to reopen a frozen song — whether explicit ("please unfreeze")
+// or auto-created (a Contributor/Admin tried to add to a frozen song).
+model UnfreezeRequest {
+  id            String         @id @default(cuid())
+  songId        String
+  song          Song           @relation(fields: [songId], references: [id])
+  requestedById String
+  requestedBy   User           @relation("RequestedUnfreeze", fields: [requestedById], references: [id])
+  reason        String?
+  status        UnfreezeStatus @default(OPEN)
+  resolvedById  String?
+  resolvedBy    User?          @relation("ResolvedUnfreeze", fields: [resolvedById], references: [id])
+  resolvedAt    DateTime?
+  createdAt     DateTime       @default(now())
+}
+
+// ============================================================
+// Iteration 2b: notifications
+// One-way outbound webhooks only (post a message out — no reading replies back).
+// Covers Slack, Discord, Mattermost, or any tool that accepts an incoming webhook URL.
+// This is deliberately not an OAuth "app" integration — no per-platform app review,
+// no token refresh to manage, which matters a lot for self-hosted software where
+// every band runs their own instance independently.
+// ============================================================
+
+enum NotificationChannelType {
+  SLACK
+  DISCORD
+  GENERIC_WEBHOOK
+}
+
+model NotificationChannel {
+  id         String                  @id @default(cuid())
+  // Null = applies instance-wide (the common case for a single-band instance).
+  // Set = this project posts to its own channel instead of the instance default.
+  projectId  String?
+  project    Project?                @relation(fields: [projectId], references: [id])
+  type       NotificationChannelType
+  webhookUrl String
+  label      String?                 // e.g. "Band Discord #new-takes"
+  createdAt  DateTime                @default(now())
+}
+
+// ============================================================
+// Iteration 2c: invites
+// A generated shareable link, not an email-triggered flow — an Admin creates one,
+// pastes it wherever the band already talks, and whoever opens it and signs up
+// gets the role attached to the invite. Sidesteps needing SMTP/email just to onboard.
+// ============================================================
+
+model Invite {
+  id          String    @id @default(cuid())
+  token       String    @unique @default(cuid()) // the secret in the shareable URL
+  // Null projectId = an instance-wide invite (grants an instanceRole).
+  // Set projectId = scoped to one project (grants a Membership on that project).
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  role        Role
+  createdById String
+  createdBy   User      @relation("CreatedInvites", fields: [createdById], references: [id])
+  expiresAt   DateTime?
+  usedAt      DateTime?
+  usedById    String?
+  usedBy      User?     @relation("UsedInvite", fields: [usedById], references: [id])
+  createdAt   DateTime  @default(now())
+}
