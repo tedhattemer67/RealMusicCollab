@@ -1,45 +1,21 @@
 {
-  "name": "10165167",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "prisma": "^6.19.3"
-  },
-  "dependencies": {
-    "@prisma/client": "^6.19.3"
-  }
-}
-{
   "name": "realmusiccollab",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "dependencies": {
-    "prisma": "^6.19.3",
-    "@prisma/client": "^6.19.3"
-  }
-}
-{
-  "name": "real-music-collab",
   "private": true,
   "workspaces": [
     "packages/server",
     "packages/client"
   ],
   "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
     "dev:server": "npm run dev --workspace packages/server",
     "dev:client": "npm run dev --workspace packages/client",
     "migrate": "npx prisma migrate dev",
     "studio": "npx prisma studio"
+  },
+  "dependencies": {
+    "prisma": "^6.19.3",
+    "@prisma/client": "^6.19.3"
   }
 }
-
