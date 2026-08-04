@@ -11,8 +11,8 @@
 // Iteration 4: mixes — Mix, MixComponent (the frozen per-track manifest),
 //   Song.currentMixId; Approval and Annotation widened to also cover Mixes.
 // Iteration 5: to-dos — Todo, scoped to Project/Song/Track, many-to-many assignment.
-// NOT yet modeled (coming in later iterations):
-//   - AuditLog (freeze/unfreeze/approval/download history)
+// Iteration 6: audit log — AuditLog, polymorphic (entityType, entityId) reference.
+// All six planned iterations are now in place.
 // ============================================================
 
 datasource db {
@@ -76,6 +76,7 @@ model User {
   createdTodos      Todo[]            @relation("CreatedTodo")
   completedTodos    Todo[]            @relation("CompletedTodo")
   assignedTodos     Todo[]            @relation("TodoAssignees")
+  auditLogs         AuditLog[]
 }
 
 model Project {
@@ -422,4 +423,49 @@ model Todo {
   createdAt   DateTime @default(now())
 
   assignees User[] @relation("TodoAssignees")
+}
+
+// ============================================================
+// Iteration 6: audit log
+// Deliberately a different pattern than Annotation/Todo: rather than a fixed
+// set of nullable foreign keys (one per possible parent), this uses a
+// polymorphic (entityType, entityId) pair so logging a new kind of event
+// later never requires a schema migration. The real tradeoff: the database
+// cannot enforce that entityId points at an actual row of that type — that
+// referential integrity is given up on purpose for this one table, since an
+// audit log is a historical record, not a live relationship.
+// metadata holds action-specific context (e.g. which download mode was used,
+// which take got promoted) without needing a column per action type.
+// ============================================================
+
+enum AuditAction {
+  SONG_FROZEN
+  UNFREEZE_REQUESTED
+  UNFREEZE_APPROVED
+  UNFREEZE_DENIED
+  TAKE_UPLOADED
+  TAKE_PROMOTED
+  APPROVAL_GIVEN
+  MIX_CREATED
+  MIX_FINALIZED
+  DOWNLOAD_WORKING_PULL
+  DOWNLOAD_HANDOFF
+  DOWNLOAD_ARCHIVE
+  TODO_CREATED
+  TODO_COMPLETED
+}
+
+model AuditLog {
+  id     String      @id @default(cuid())
+  action AuditAction
+
+  actorId String
+  actor   User   @relation(fields: [actorId], references: [id])
+
+  entityType String // e.g. "Song", "Take", "Mix", "Todo" — not a DB-enforced FK
+  entityId   String // the id of that row — no referential integrity, by design
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
 }
