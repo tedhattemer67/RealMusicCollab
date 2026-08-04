@@ -1,19 +1,39 @@
 // test-seed-2.js
 // Run with: node test-seed-2.js
-// Tests: Mix + MixComponent manifest + Song.currentMixId, and Todo with
-// multiple assignees via the implicit many-to-many relation.
+// Safe to run more than once: users are upserted by email rather than
+// always freshly created. Tests: StorageConfig, Mix + MixComponent manifest
+// + Song.currentMixId, and Todo with multiple assignees.
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  // --- Two users, so we have someone to assign a Todo to besides the creator ---
-  const admin = await prisma.user.create({
-    data: { name: 'Ted', email: 'ted@example.com', instanceRole: 'ADMIN' },
+  // --- Two users, upserted so re-running this script doesn't collide on email ---
+  const admin = await prisma.user.upsert({
+    where: { email: 'ted@example.com' },
+    update: {},
+    create: { name: 'Ted', email: 'ted@example.com', instanceRole: 'ADMIN' },
   });
-  const bandmate = await prisma.user.create({
-    data: { name: 'Jamie', email: 'jamie@example.com', instanceRole: 'CONTRIBUTOR' },
+  const bandmate = await prisma.user.upsert({
+    where: { email: 'jamie@example.com' },
+    update: {},
+    create: { name: 'Jamie', email: 'jamie@example.com', instanceRole: 'CONTRIBUTOR' },
   });
+
+  // --- A local StorageConfig for takes/mixes to reference ---
+  let storageConfig = await prisma.storageConfig.findFirst({
+    where: { type: 'LOCAL', isDefault: true },
+  });
+  if (!storageConfig) {
+    storageConfig = await prisma.storageConfig.create({
+      data: {
+        type: 'LOCAL',
+        label: 'Local test storage',
+        isDefault: true,
+        settings: { rootPath: './fake-storage' },
+      },
+    });
+  }
 
   // --- Project -> Song -> Track -> Take, all in one nested write ---
   const project = await prisma.project.create({
@@ -28,7 +48,7 @@ async function main() {
               takes: {
                 create: {
                   takeNumber: 1,
-                  storageAdapter: 'LOCAL',
+                  storageConfigId: storageConfig.id,
                   storageKey: 'fake/path/vocal-take1.wav',
                   performedById: bandmate.id,
                   uploadedById: bandmate.id,
@@ -46,8 +66,7 @@ async function main() {
   const track = song.tracks[0];
   const take = track.takes[0];
 
-  // Promote that take to be the track's current default (mirrors what the
-  // app would do automatically for an Admin upload).
+  // Promote that take to be the track's current default
   await prisma.track.update({
     where: { id: track.id },
     data: { currentTakeId: take.id },
@@ -58,7 +77,7 @@ async function main() {
     data: {
       songId: song.id,
       mixNumber: 1,
-      storageAdapter: 'LOCAL',
+      storageConfigId: storageConfig.id,
       storageKey: 'fake/path/mix-v1.wav',
       uploadedById: admin.id,
       components: {
@@ -71,14 +90,13 @@ async function main() {
     include: { components: true },
   });
 
-  // Set it as the song's current mix
   await prisma.song.update({
     where: { id: song.id },
     data: { currentMixId: mix.id },
   });
 
   // --- A Todo assigned to both people ---
-  const todo = await prisma.todo.create({
+  await prisma.todo.create({
     data: {
       body: 'Fix the booming kick drum',
       trackId: track.id,
@@ -90,7 +108,7 @@ async function main() {
     include: { assignees: true },
   });
 
-  // --- Read everything back together, to see it all hang correctly ---
+  // --- Read everything back together ---
   const result = await prisma.song.findUnique({
     where: { id: song.id },
     include: {
