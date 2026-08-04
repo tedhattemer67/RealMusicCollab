@@ -13,6 +13,10 @@
 // Iteration 5: to-dos — Todo, scoped to Project/Song/Track, many-to-many assignment.
 // Iteration 6: audit log — AuditLog, polymorphic (entityType, entityId) reference.
 // All six planned iterations are now in place.
+// Post-review pass: User.active/deactivatedAt added; StorageConfig introduced
+//   (Take/Mix now reference it instead of a raw enum); AuditLog.action switched
+//   from an enum to a plain String; added an index on AuditLog's polymorphic
+//   reference.
 // ============================================================
 
 datasource db {
@@ -48,12 +52,46 @@ enum StorageAdapter {
   LOCAL
 }
 
+// ============================================================
+// Storage configuration
+// Take/Mix used to carry a raw StorageAdapter enum directly, which couldn't
+// tell two S3 buckets apart and had nowhere to put actual connection details
+// (bucket name, region, folder id, local path root). A real StorageConfig
+// row fixes that: Take/Mix now point at a specific configured instance, and
+// a band can run more than one of the same adapter type if they ever need to.
+// Null projectId = instance-wide default; set = this project uses its own.
+// settings is intentionally a loose Json bag since each adapter type needs
+// different fields (bucket+region for S3, folder id for Drive, a root path
+// for local) — actual credentials belong in environment variables at
+// runtime, not in this column, even though nothing here enforces that.
+// ============================================================
+
+model StorageConfig {
+  id        String         @id @default(cuid())
+  type      StorageAdapter
+  label     String? // e.g. "Primary S3 bucket"
+  projectId String?
+  project   Project?       @relation(fields: [projectId], references: [id])
+  isDefault Boolean        @default(false)
+  settings  Json
+  createdAt DateTime       @default(now())
+
+  takes Take[]
+  mixes Mix[]
+}
+
 // Minimal stub for now — email/auth fields arrive with the invite flow.
 model User {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
   createdAt DateTime @default(now())
+
+  // Any Admin can deactivate an account instance-wide (no separate Owner tier).
+  // Deactivated users are never deleted — history (Takes, Approvals, etc.)
+  // must stay intact — just locked out of logging in.
+  active        Boolean   @default(true)
+  deactivatedAt DateTime?
 
   // The three-tier role cascade, narrowest wins:
   //   SongRoleOverride (this song only) > Membership (this project only) > instanceRole (everywhere)
@@ -92,6 +130,7 @@ model Project {
   notificationChannels NotificationChannel[]
   invites           Invite[]
   todos             Todo[]
+  storageConfigs    StorageConfig[]
 }
 
 model Song {
@@ -142,8 +181,9 @@ model Take {
   track      Track          @relation("TrackTakes", fields: [trackId], references: [id])
   takeNumber Int            // sequential per track, e.g. "Take 3" — set by app logic on create
 
-  storageAdapter StorageAdapter
-  storageKey     String       // path/key/id within whichever adapter is configured
+  storageConfigId String
+  storageConfig   StorageConfig @relation(fields: [storageConfigId], references: [id])
+  storageKey      String        // path/key/id within that config's adapter
 
   performedById String         // required — guests get a Contributor account, never a plain-text name
   performedBy   User           @relation("PerformedBy", fields: [performedById], references: [id])
@@ -356,8 +396,9 @@ model Mix {
   song      Song   @relation(fields: [songId], references: [id])
   mixNumber Int    // sequential per song, e.g. "Mix v2" — set by app logic on create
 
-  storageAdapter StorageAdapter
-  storageKey     String
+  storageConfigId String
+  storageConfig   StorageConfig @relation(fields: [storageConfigId], references: [id])
+  storageKey      String
 
   uploadedById String
   uploadedBy   User   @relation("UploadedMix", fields: [uploadedById], references: [id])
@@ -438,26 +479,18 @@ model Todo {
 // which take got promoted) without needing a column per action type.
 // ============================================================
 
-enum AuditAction {
-  SONG_FROZEN
-  UNFREEZE_REQUESTED
-  UNFREEZE_APPROVED
-  UNFREEZE_DENIED
-  TAKE_UPLOADED
-  TAKE_PROMOTED
-  APPROVAL_GIVEN
-  MIX_CREATED
-  MIX_FINALIZED
-  DOWNLOAD_WORKING_PULL
-  DOWNLOAD_HANDOFF
-  DOWNLOAD_ARCHIVE
-  TODO_CREATED
-  TODO_COMPLETED
-}
-
+// Deliberately a plain String, not an enum — an enum here would quietly
+// contradict the whole point of the polymorphic entityType/entityId design:
+// logging a genuinely new kind of event should never require a migration.
+// Conventional values in use so far (kept here as documentation, not
+// database-enforced):
+//   SONG_FROZEN, UNFREEZE_REQUESTED, UNFREEZE_APPROVED, UNFREEZE_DENIED,
+//   TAKE_UPLOADED, TAKE_PROMOTED, APPROVAL_GIVEN, MIX_CREATED, MIX_FINALIZED,
+//   DOWNLOAD_WORKING_PULL, DOWNLOAD_HANDOFF, DOWNLOAD_ARCHIVE,
+//   TODO_CREATED, TODO_COMPLETED
 model AuditLog {
-  id     String      @id @default(cuid())
-  action AuditAction
+  id     String @id @default(cuid())
+  action String
 
   actorId String
   actor   User   @relation(fields: [actorId], references: [id])
@@ -468,4 +501,6 @@ model AuditLog {
   metadata Json?
 
   createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
 }
