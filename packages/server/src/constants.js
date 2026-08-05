@@ -1,0 +1,3 @@
+module.exports = {
+  SESSION_COOKIE_NAME: 'session_id',
+};

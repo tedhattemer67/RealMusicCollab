@@ -1,10 +1,11 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
+const requireAuth = require('../middleware/requireAuth');
+const { SESSION_COOKIE_NAME } = require('../constants');
 
 const router = express.Router();
 
-const SESSION_COOKIE_NAME = 'session_id';
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // POST /api/login
@@ -82,6 +83,17 @@ router.post('/logout', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong logging out.' });
   }
+});
+
+// GET /api/me — the simplest possible proof the middleware works: returns
+// whoever the session cookie actually belongs to, straight from the database.
+router.get('/me', requireAuth, (req, res) => {
+  res.json({
+    id: req.user.id,
+    name: req.user.name,
+    email: req.user.email,
+    instanceRole: req.user.instanceRole,
+  });
 });
 
 module.exports = router;

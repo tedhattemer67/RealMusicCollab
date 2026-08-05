@@ -1,43 +1,52 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
+const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
 
 const VALID_ROLES = ['ADMIN', 'CONTRIBUTOR', 'REVIEWER', 'VIEWER'];
 
 // POST /api/invites
-// Creates a shareable invite link. No real auth yet — createdById is passed
-// directly for now, same temporary simplification as the upload endpoint.
-// body: { role, createdById, projectId? (optional -> instance-wide invite
-//         if omitted), expiresInDays? (optional) }
-router.post('/invites', async (req, res) => {
-  try {
-    const { role, createdById, projectId, expiresInDays } = req.body;
+// Requires a logged-in Admin now — effective role is resolved for whichever
+// project this invite is scoped to (or the instance default, for an
+// instance-wide invite with no projectId).
+// body: { role, projectId? (optional -> instance-wide invite if omitted),
+//         expiresInDays? (optional) }
+router.post(
+  '/invites',
+  requireAuth,
+  requireRole(['ADMIN'], (req) => ({ projectId: req.body.projectId || undefined })),
+  async (req, res) => {
+    try {
+      const { role, projectId, expiresInDays } = req.body;
+      const createdById = req.user.id;
 
-    if (!role || !createdById) {
-      return res.status(400).json({ error: 'role and createdById are required.' });
+      if (!role) {
+        return res.status(400).json({ error: 'role is required.' });
+      }
+      if (!VALID_ROLES.includes(role)) {
+        return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
+      }
+
+      const expiresAt = expiresInDays
+        ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
+        : null;
+
+      const invite = await prisma.invite.create({
+        data: { role, createdById, projectId: projectId || null, expiresAt },
+      });
+
+      // redeemUrl is just a suggested shape for the frontend route —
+      // nothing here actually serves that URL yet.
+      res.status(201).json({ ...invite, redeemUrl: `/invite/${invite.token}` });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Something went wrong creating the invite.' });
     }
-    if (!VALID_ROLES.includes(role)) {
-      return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
-    }
-
-    const expiresAt = expiresInDays
-      ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
-      : null;
-
-    const invite = await prisma.invite.create({
-      data: { role, createdById, projectId: projectId || null, expiresAt },
-    });
-
-    // redeemUrl is just a suggested shape for the frontend route —
-    // nothing here actually serves that URL yet.
-    res.status(201).json({ ...invite, redeemUrl: `/invite/${invite.token}` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Something went wrong creating the invite.' });
   }
-});
+);
 
 // GET /api/invites/:token
 // Lets a signup page preview what an invite grants before asking for a

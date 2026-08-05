@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const prisma = require('../prisma');
 const { getOrCreateDefaultLocalConfig, ensureDir, LOCAL_ROOT } = require('../storage');
+const requireAuth = require('../middleware/requireAuth');
 
 const router = express.Router();
 
@@ -21,25 +22,24 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // POST /api/tracks/:trackId/takes
+// Requires a logged-in session — uploadedById comes from req.user, not the
+// request body, now that requireAuth actually verifies who's asking.
 // multipart/form-data fields:
 //   file             (required) — the audio file itself
-//   performedById    (required) — stand-in for real auth, for now
-//   uploadedById     (required) — stand-in for real auth, for now
+//   performedById    (optional) — defaults to the logged-in user; override
+//                                  when uploading on behalf of a session guest
 //   note             (optional)
 //   recordedOn       (optional, ISO date string)
 //   readyForFeedback (optional, "false" to mark as a private draft — defaults to true)
-router.post('/tracks/:trackId/takes', upload.single('file'), async (req, res) => {
+router.post('/tracks/:trackId/takes', requireAuth, upload.single('file'), async (req, res) => {
   try {
     const { trackId } = req.params;
-    const { performedById, uploadedById, note, recordedOn, readyForFeedback } = req.body;
+    const { note, recordedOn, readyForFeedback } = req.body;
+    const performedById = req.body.performedById || req.user.id;
+    const uploadedById = req.user.id;
 
     if (!req.file) {
       return res.status(400).json({ error: 'A file is required (field name: "file").' });
-    }
-    if (!performedById || !uploadedById) {
-      return res
-        .status(400)
-        .json({ error: 'performedById and uploadedById are both required.' });
     }
 
     const track = await prisma.track.findUnique({ where: { id: trackId } });
@@ -74,10 +74,10 @@ router.post('/tracks/:trackId/takes', upload.single('file'), async (req, res) =>
 
     // The role-dependent promotion rule we designed: an Admin's own upload
     // auto-promotes to the track's current default; anyone else's lands as
-    // a new take, pending an Admin's promotion later.
-    const uploader = await prisma.user.findUnique({ where: { id: uploadedById } });
+    // a new take, pending an Admin's promotion later. req.user came straight
+    // from the verified session, so this is a real check now, not a guess.
     let promoted = false;
-    if (uploader && uploader.instanceRole === 'ADMIN') {
+    if (req.user.instanceRole === 'ADMIN') {
       await prisma.track.update({
         where: { id: trackId },
         data: { currentTakeId: take.id },
