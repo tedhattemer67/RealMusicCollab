@@ -17,6 +17,8 @@
 //   (Take/Mix now reference it instead of a raw enum); AuditLog.action switched
 //   from an enum to a plain String; added an index on AuditLog's polymorphic
 //   reference.
+// Iteration 7: sessions — User.passwordHash, Session (session-based auth,
+//   not stateless JWT, so deactivation can revoke access immediately).
 // ============================================================
 
 datasource db {
@@ -93,6 +95,13 @@ model User {
   active        Boolean   @default(true)
   deactivatedAt DateTime?
 
+  // Nullable rather than required: set when someone redeems an Invite and
+  // picks a password. Existing seeded users have none yet, and it stays
+  // nullable going forward too, in case a future auth method (SSO, etc.)
+  // never needs a local password at all. Only ever a hash — never the
+  // plaintext password itself.
+  passwordHash String?
+
   // The three-tier role cascade, narrowest wins:
   //   SongRoleOverride (this song only) > Membership (this project only) > instanceRole (everywhere)
   // Most people just carry an instanceRole and never need a Membership or override at all —
@@ -115,6 +124,7 @@ model User {
   completedTodos    Todo[]            @relation("CompletedTodo")
   assignedTodos     Todo[]            @relation("TodoAssignees")
   auditLogs         AuditLog[]
+  sessions          Session[]
 }
 
 model Project {
@@ -503,4 +513,25 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([entityType, entityId])
+}
+
+// ============================================================
+// Iteration 7: sessions
+// One row per logged-in session, not a stateless JWT — deliberately, so a
+// deactivated user's access can be cut off immediately by revoking their
+// sessions, rather than waiting for a token to expire on its own. The
+// session's own id is what gets stored in the browser cookie; there's no
+// separate token field, since a cuid is already unguessable enough.
+// ============================================================
+
+model Session {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime? // set on logout, or when an Admin deactivates this user
+
+  @@index([userId])
 }
