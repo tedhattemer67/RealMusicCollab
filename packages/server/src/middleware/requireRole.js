@@ -11,7 +11,7 @@ function requireRole(allowedRoles, extractScope) {
         return res.status(401).json({ error: 'Not logged in.' });
       }
 
-      const scope = extractScope ? extractScope(req) : {};
+      const scope = extractScope ? await extractScope(req) : {};
       const role = await getEffectiveRole(req.user.id, scope);
 
       if (!allowedRoles.includes(role)) {
