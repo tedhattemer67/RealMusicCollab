@@ -4,6 +4,7 @@ const takesRouter = require('./routes/takes');
 const invitesRouter = require('./routes/invites');
 const authRouter = require('./routes/auth');
 const approvalsRouter = require('./routes/approvals');
+const songsRouter = require('./routes/songs');
 
 const app = express();
 app.use(express.json());
@@ -17,6 +18,7 @@ app.use('/api', takesRouter);
 app.use('/api', invitesRouter);
 app.use('/api', authRouter);
 app.use('/api', approvalsRouter);
+app.use('/api', songsRouter);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

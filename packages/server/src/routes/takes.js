@@ -42,9 +42,40 @@ router.post('/tracks/:trackId/takes', requireAuth, upload.single('file'), async 
       return res.status(400).json({ error: 'A file is required (field name: "file").' });
     }
 
-    const track = await prisma.track.findUnique({ where: { id: trackId } });
+    const track = await prisma.track.findUnique({
+      where: { id: trackId },
+      include: { song: { select: { id: true, status: true } } },
+    });
     if (!track) {
       return res.status(404).json({ error: `No track found with id ${trackId}.` });
+    }
+
+    // Uploading to a frozen song doesn't get blocked — it auto-creates an
+    // unfreeze request instead (unless one's already open), per how we
+    // designed this. The take still gets created either way.
+    let unfreezeRequestCreated = false;
+    if (track.song.status === 'FROZEN') {
+      const existingOpen = await prisma.unfreezeRequest.findFirst({
+        where: { songId: track.song.id, status: 'OPEN' },
+      });
+      if (!existingOpen) {
+        await prisma.unfreezeRequest.create({
+          data: {
+            songId: track.song.id,
+            requestedById: req.user.id,
+            reason: 'Automatic — new upload while song was frozen',
+          },
+        });
+        await prisma.auditLog.create({
+          data: {
+            action: 'UNFREEZE_REQUESTED',
+            actorId: req.user.id,
+            entityType: 'Song',
+            entityId: track.song.id,
+          },
+        });
+        unfreezeRequestCreated = true;
+      }
     }
 
     const storageConfig = await getOrCreateDefaultLocalConfig();
@@ -85,7 +116,21 @@ router.post('/tracks/:trackId/takes', requireAuth, upload.single('file'), async 
       promoted = true;
     }
 
-    res.status(201).json({ ...take, promotedToDefault: promoted });
+    await prisma.auditLog.create({
+      data: {
+        action: 'TAKE_UPLOADED',
+        actorId: req.user.id,
+        entityType: 'Take',
+        entityId: take.id,
+      },
+    });
+
+    res.status(201).json({
+      ...take,
+      promotedToDefault: promoted,
+      songWasFrozen: track.song.status === 'FROZEN',
+      unfreezeRequestCreated,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong creating the take.' });
