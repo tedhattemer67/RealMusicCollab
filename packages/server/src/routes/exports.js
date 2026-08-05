@@ -71,7 +71,12 @@ router.post('/songs/:songId/export', requireAuth, async (req, res) => {
 
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', (err) => {
-      throw err;
+      console.error('Archive error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Something went wrong preparing the export.' });
+      } else {
+        res.destroy(err);
+      }
     });
     archive.pipe(res);
 
@@ -175,7 +180,12 @@ router.post(
 
       const archive = archiver('zip', { zlib: { level: 9 } });
       archive.on('error', (err) => {
-        throw err;
+        console.error('Archive error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Something went wrong preparing the archive.' });
+        } else {
+          res.destroy(err);
+        }
       });
       archive.pipe(res);
 
