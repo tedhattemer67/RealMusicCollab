@@ -8,6 +8,7 @@ const songsRouter = require('./routes/songs');
 const annotationsRouter = require('./routes/annotations');
 const todosRouter = require('./routes/todos');
 const mixesRouter = require('./routes/mixes');
+const exportsRouter = require('./routes/exports');
 
 const app = express();
 app.use(express.json());
@@ -25,6 +26,7 @@ app.use('/api', songsRouter);
 app.use('/api', annotationsRouter);
 app.use('/api', todosRouter);
 app.use('/api', mixesRouter);
+app.use('/api', exportsRouter);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
