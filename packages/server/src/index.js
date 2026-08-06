@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const takesRouter = require('./routes/takes');
 const invitesRouter = require('./routes/invites');
@@ -9,8 +10,20 @@ const annotationsRouter = require('./routes/annotations');
 const todosRouter = require('./routes/todos');
 const mixesRouter = require('./routes/mixes');
 const exportsRouter = require('./routes/exports');
+const projectsRouter = require('./routes/projects');
 
 const app = express();
+
+// CLIENT_ORIGIN needs to be set explicitly (not "*") because we're using
+// cookie-based sessions — browsers refuse a wildcard origin combined with
+// credentials. Defaults to Vite's default dev server port for local dev;
+// set the real env var once the frontend has a real deployed URL.
+app.use(
+  cors({
+    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 
@@ -27,6 +40,7 @@ app.use('/api', annotationsRouter);
 app.use('/api', todosRouter);
 app.use('/api', mixesRouter);
 app.use('/api', exportsRouter);
+app.use('/api', projectsRouter);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

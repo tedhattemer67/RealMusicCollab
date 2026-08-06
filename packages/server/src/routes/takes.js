@@ -137,4 +137,21 @@ router.post('/tracks/:trackId/takes', requireAuth, upload.single('file'), async 
   }
 });
 
+// GET /api/tracks/:trackId/takes — full take history for a track, for the
+// "expand to see previous takes" view. POST above only ever created one;
+// nothing previously listed them back.
+router.get('/tracks/:trackId/takes', requireAuth, async (req, res) => {
+  try {
+    const takes = await prisma.take.findMany({
+      where: { trackId: req.params.trackId },
+      orderBy: { takeNumber: 'asc' },
+      include: { performedBy: { select: { id: true, name: true } } },
+    });
+    res.json(takes);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong fetching takes.' });
+  }
+});
+
 module.exports = router;
