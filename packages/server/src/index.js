@@ -11,6 +11,9 @@ const todosRouter = require('./routes/todos');
 const mixesRouter = require('./routes/mixes');
 const exportsRouter = require('./routes/exports');
 const projectsRouter = require('./routes/projects');
+const streamRouter = require('./routes/stream');
+const tracksRouter = require('./routes/tracks');
+const usersRouter = require('./routes/users');
 
 const app = express();
 
@@ -41,6 +44,9 @@ app.use('/api', todosRouter);
 app.use('/api', mixesRouter);
 app.use('/api', exportsRouter);
 app.use('/api', projectsRouter);
+app.use('/api', streamRouter);
+app.use('/api', tracksRouter);
+app.use('/api', usersRouter);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

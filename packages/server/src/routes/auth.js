@@ -2,11 +2,9 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
-const { SESSION_COOKIE_NAME } = require('../constants');
+const { SESSION_COOKIE_NAME, SESSION_DURATION_MS } = require('../constants');
 
 const router = express.Router();
-
-const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // POST /api/login
 // body: { email, password }

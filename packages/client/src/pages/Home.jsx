@@ -1,5 +1,8 @@
+import { Routes, Route, Link } from 'react-router-dom';
 import { logout } from '../api';
+import ProjectList from './ProjectList.jsx';
 import ProjectTree from './ProjectTree.jsx';
+import Members from './Members.jsx';
 
 export default function Home({ user, onLoggedOut }) {
   async function handleLogout() {
@@ -25,7 +28,16 @@ export default function Home({ user, onLoggedOut }) {
           Log out
         </button>
       </div>
-      <ProjectTree />
+      <nav style={{ marginBottom: 16, fontSize: 14 }}>
+        <Link to="/">Projects</Link>
+        {' | '}
+        <Link to="/members">Band</Link>
+      </nav>
+      <Routes>
+        <Route path="/" element={<ProjectList />} />
+        <Route path="/projects/:projectId" element={<ProjectTree user={user} />} />
+        <Route path="/members" element={<Members user={user} />} />
+      </Routes>
     </div>
   );
 }

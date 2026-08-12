@@ -1,9 +1,23 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { getOrCreateDefaultLocalConfig, ensureDir, LOCAL_ROOT } = require('../storage');
+const { parseBatchFilenames } = require('../lib/filenameParser');
 
 const router = express.Router();
+
+// Memory storage, not disk storage like the regular take-upload route —
+// the Track doesn't exist yet when the file arrives, so there's no id to
+// build a destination folder from until after we create the row.
+const uploadMemory = multer({ storage: multer.memoryStorage() });
+
+// Not Viewer (listen/comment only) and not Reviewer (approves, doesn't
+// upload) — only Admin and Contributor can add material.
+const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 
 // POST /api/songs/:songId/freeze — Admin only.
 router.post(
@@ -160,3 +174,324 @@ router.post(
 );
 
 module.exports = router;
+
+// POST /api/songs/:songId/tracks
+// Creates a new Track *and* its first Take together — never leaves an
+// observably empty track, same non-null-in-the-UI principle from the
+// original schema design.
+// multipart/form-data:
+//   name             (required) — the track's name
+//   file             (required) — its first take's audio
+//   performedById    (optional) — defaults to the logged-in user
+//   note             (optional)
+//   recordedOn       (optional, ISO date string)
+//   readyForFeedback (optional, "false" to mark as a private draft)
+router.post('/songs/:songId/tracks', requireAuth, requireRole(UPLOADER_ROLES, (req) => ({ songId: req.params.songId })), uploadMemory.single('file'), async (req, res) => {
+  try {
+    const { songId } = req.params;
+    const { name, note, recordedOn, readyForFeedback } = req.body;
+    const performedById = req.body.performedById || req.user.id;
+
+    if (!name) {
+      return res.status(400).json({ error: 'name (the track name) is required.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'A file is required (field name: "file").' });
+    }
+
+    const song = await prisma.song.findUnique({ where: { id: songId } });
+    if (!song) {
+      return res.status(404).json({ error: `No song found with id ${songId}.` });
+    }
+
+    // Same frozen-song handling as the regular upload endpoint: don't block,
+    // auto-create an unfreeze request instead (unless one's already open).
+    let unfreezeRequestCreated = false;
+    if (song.status === 'FROZEN') {
+      const existingOpen = await prisma.unfreezeRequest.findFirst({
+        where: { songId, status: 'OPEN' },
+      });
+      if (!existingOpen) {
+        await prisma.unfreezeRequest.create({
+          data: {
+            songId,
+            requestedById: req.user.id,
+            reason: 'Automatic — new track added while song was frozen',
+          },
+        });
+        await prisma.auditLog.create({
+          data: {
+            action: 'UNFREEZE_REQUESTED',
+            actorId: req.user.id,
+            entityType: 'Song',
+            entityId: songId,
+          },
+        });
+        unfreezeRequestCreated = true;
+      }
+    }
+
+    const track = await prisma.track.create({ data: { songId, name } });
+
+    const storageConfig = await getOrCreateDefaultLocalConfig();
+    const dir = path.join(LOCAL_ROOT, track.id);
+    ensureDir(dir);
+    const filename = `${Date.now()}-${req.file.originalname}`;
+    const fullPath = path.join(dir, filename);
+    fs.writeFileSync(fullPath, req.file.buffer);
+    const storageKey = path.relative(LOCAL_ROOT, fullPath).replace(/\\/g, '/');
+
+    const take = await prisma.take.create({
+      data: {
+        trackId: track.id,
+        takeNumber: 1,
+        storageConfigId: storageConfig.id,
+        storageKey,
+        performedById,
+        uploadedById: req.user.id,
+        note: note || null,
+        recordedOn: recordedOn ? new Date(recordedOn) : null,
+        readyForFeedback: readyForFeedback === 'false' ? false : true,
+      },
+    });
+
+    // A brand-new track's first take always becomes current, regardless of
+    // role. The role-gated promotion rule exists to protect an *existing*
+    // default from being silently overridden — that risk doesn't apply to a
+    // track that has nothing yet.
+    await prisma.track.update({
+      where: { id: track.id },
+      data: { currentTakeId: take.id },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'TAKE_UPLOADED',
+        actorId: req.user.id,
+        entityType: 'Take',
+        entityId: take.id,
+      },
+    });
+
+    res.status(201).json({
+      ...track,
+      currentTake: take,
+      songWasFrozen: song.status === 'FROZEN',
+      unfreezeRequestCreated,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong creating the track.' });
+  }
+});
+
+// POST /api/songs/:songId/batch-preview
+// body: { filenames: string[] }
+// Takes just filenames — no file bytes — and returns a proposed breakdown:
+// for each file, the parsed candidate name and whether it matches an
+// existing track in this song (-> would add a take there) or looks new
+// (-> would create a track). Nothing is saved here. This exists specifically
+// so a bad or ambiguous parse costs nothing — it's caught and fixed in this
+// preview, never silently committed.
+router.post('/songs/:songId/batch-preview', requireAuth, requireRole(UPLOADER_ROLES, (req) => ({ songId: req.params.songId })), async (req, res) => {
+  try {
+    const { songId } = req.params;
+    const { filenames } = req.body;
+    if (!Array.isArray(filenames) || filenames.length === 0) {
+      return res.status(400).json({ error: 'filenames must be a non-empty array.' });
+    }
+
+    const song = await prisma.song.findUnique({
+      where: { id: songId },
+      include: { tracks: { select: { id: true, name: true } } },
+    });
+    if (!song) {
+      return res.status(404).json({ error: `No song found with id ${songId}.` });
+    }
+
+    const parsed = parseBatchFilenames(filenames);
+
+    const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const trackByNormalizedName = new Map(song.tracks.map((t) => [normalize(t.name), t]));
+
+    const preview = parsed.map(({ filename, candidateName }) => {
+      const match = trackByNormalizedName.get(normalize(candidateName));
+      return {
+        filename,
+        candidateName,
+        matchedTrackId: match ? match.id : null,
+        matchedTrackName: match ? match.name : null,
+        action: match ? 'add-take' : 'new-track',
+      };
+    });
+
+    res.json({ preview });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong previewing the batch.' });
+  }
+});
+
+// POST /api/songs/:songId/batch-upload
+// multipart/form-data:
+//   files  — the actual audio files (field name "files", multiple)
+//   items  — a JSON string: an array parallel to the confirmed preview,
+//            each { filename, name, action: 'new-track'|'add-take',
+//                    trackId? (required for add-take), performedById?, note? }
+// This is the real commit step — only reached after the user has reviewed
+// and possibly corrected everything in batch-preview above.
+router.post(
+  '/songs/:songId/batch-upload',
+  requireAuth,
+  requireRole(UPLOADER_ROLES, (req) => ({ songId: req.params.songId })),
+  uploadMemory.array('files'),
+  async (req, res) => {
+    try {
+      const { songId } = req.params;
+      let items;
+      try {
+        items = JSON.parse(req.body.items);
+      } catch (e) {
+        return res.status(400).json({ error: 'items must be valid JSON.' });
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'items must be a non-empty array.' });
+      }
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: 'No files were uploaded.' });
+      }
+
+      const song = await prisma.song.findUnique({ where: { id: songId } });
+      if (!song) {
+        return res.status(404).json({ error: `No song found with id ${songId}.` });
+      }
+
+      const fileByName = new Map(req.files.map((f) => [f.originalname, f]));
+      const storageConfig = await getOrCreateDefaultLocalConfig();
+
+      // One unfreeze request for the whole batch — not one per file.
+      let unfreezeRequestCreated = false;
+      if (song.status === 'FROZEN') {
+        const existingOpen = await prisma.unfreezeRequest.findFirst({
+          where: { songId, status: 'OPEN' },
+        });
+        if (!existingOpen) {
+          await prisma.unfreezeRequest.create({
+            data: {
+              songId,
+              requestedById: req.user.id,
+              reason: 'Automatic — batch upload while song was frozen',
+            },
+          });
+          await prisma.auditLog.create({
+            data: {
+              action: 'UNFREEZE_REQUESTED',
+              actorId: req.user.id,
+              entityType: 'Song',
+              entityId: songId,
+            },
+          });
+          unfreezeRequestCreated = true;
+        }
+      }
+
+      // Processed one at a time and reported per-file, rather than one
+      // all-or-nothing transaction — a bad file in a batch of 8 shouldn't
+      // sink the other 7.
+      const results = [];
+
+      for (const item of items) {
+        const file = fileByName.get(item.filename);
+        if (!file) {
+          results.push({ filename: item.filename, error: 'File not found in upload.' });
+          continue;
+        }
+
+        try {
+          let trackId = item.trackId;
+
+          if (item.action === 'new-track') {
+            if (!item.name) {
+              results.push({
+                filename: item.filename,
+                error: 'A track name is required for a new track — this should always come from what was confirmed on the review screen, never assumed.',
+              });
+              continue;
+            }
+            const track = await prisma.track.create({ data: { songId, name: item.name } });
+            trackId = track.id;
+          } else if (!trackId) {
+            results.push({ filename: item.filename, error: 'trackId is required for add-take.' });
+            continue;
+          } else if (item.name) {
+            // Lets a name correction from the review screen ride along
+            // even when the file itself is landing on an existing track.
+            await prisma.track.update({ where: { id: trackId }, data: { name: item.name } });
+          }
+
+          const dir = path.join(LOCAL_ROOT, trackId);
+          ensureDir(dir);
+          const filename = `${Date.now()}-${file.originalname}`;
+          const fullPath = path.join(dir, filename);
+          fs.writeFileSync(fullPath, file.buffer);
+          const storageKey = path.relative(LOCAL_ROOT, fullPath).replace(/\\/g, '/');
+
+          const existingTakeCount = await prisma.take.count({ where: { trackId } });
+          const takeNumber = existingTakeCount + 1;
+          const performedById = item.performedById || req.user.id;
+
+          const take = await prisma.take.create({
+            data: {
+              trackId,
+              takeNumber,
+              storageConfigId: storageConfig.id,
+              storageKey,
+              performedById,
+              uploadedById: req.user.id,
+              note: item.note || null,
+              readyForFeedback: true,
+            },
+          });
+
+          // Same promotion rule as everywhere else: a brand-new track's
+          // first take always becomes current; for an existing track, only
+          // an Admin's upload auto-promotes.
+          let promoted = false;
+          if (item.action === 'new-track' || req.user.instanceRole === 'ADMIN') {
+            await prisma.track.update({ where: { id: trackId }, data: { currentTakeId: take.id } });
+            promoted = true;
+          }
+
+          await prisma.auditLog.create({
+            data: {
+              action: 'TAKE_UPLOADED',
+              actorId: req.user.id,
+              entityType: 'Take',
+              entityId: take.id,
+            },
+          });
+
+          results.push({
+            filename: item.filename,
+            trackId,
+            takeId: take.id,
+            takeNumber,
+            promotedToDefault: promoted,
+          });
+        } catch (err) {
+          console.error(err);
+          results.push({ filename: item.filename, error: 'Something went wrong processing this file.' });
+        }
+      }
+
+      res.status(201).json({
+        results,
+        songWasFrozen: song.status === 'FROZEN',
+        unfreezeRequestCreated,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Something went wrong with the batch upload.' });
+    }
+  }
+);

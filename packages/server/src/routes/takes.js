@@ -4,8 +4,21 @@ const path = require('path');
 const prisma = require('../prisma');
 const { getOrCreateDefaultLocalConfig, ensureDir, LOCAL_ROOT } = require('../storage');
 const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
+
+// Not Viewer (listen/comment only, by design) and not Reviewer (approves,
+// doesn't upload, by design) — only Admin and Contributor can add material.
+const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
+
+async function resolveSongIdForTrack(req) {
+  const track = await prisma.track.findUnique({
+    where: { id: req.params.trackId },
+    select: { songId: true },
+  });
+  return { songId: track ? track.songId : undefined };
+}
 
 // Files get written straight to their track's own folder as they're uploaded,
 // named with a timestamp prefix so two uploads never collide.
@@ -31,7 +44,7 @@ const upload = multer({ storage });
 //   note             (optional)
 //   recordedOn       (optional, ISO date string)
 //   readyForFeedback (optional, "false" to mark as a private draft — defaults to true)
-router.post('/tracks/:trackId/takes', requireAuth, upload.single('file'), async (req, res) => {
+router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, resolveSongIdForTrack), upload.single('file'), async (req, res) => {
   try {
     const { trackId } = req.params;
     const { note, recordedOn, readyForFeedback } = req.body;

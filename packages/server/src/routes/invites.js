@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { SESSION_COOKIE_NAME, SESSION_DURATION_MS } = require('../constants');
 
 const router = express.Router();
 
@@ -136,6 +137,18 @@ router.post('/invites/:token/redeem', async (req, res) => {
       });
 
       return newUser;
+    });
+
+    // Redeeming an invite should log you straight in, not dump you at a
+    // login screen right after signing up — same session-creation logic
+    // as the real login route, using the same shared constants.
+    const session = await prisma.session.create({
+      data: { userId: user.id, expiresAt: new Date(Date.now() + SESSION_DURATION_MS) },
+    });
+    res.cookie(SESSION_COOKIE_NAME, session.id, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: SESSION_DURATION_MS,
     });
 
     res.status(201).json({
