@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login.jsx';
 import Home from './pages/Home.jsx';
 import RedeemInvite from './pages/RedeemInvite.jsx';
+import Bootstrap from './pages/Bootstrap.jsx';
 import { getMe } from './api';
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLoggedIn={setUser} />} />
       <Route path="/invite/:token" element={<RedeemInvite onRedeemed={setUser} />} />
+      <Route path="/setup" element={<Bootstrap onLoggedIn={setUser} />} />
       <Route
         path="/*"
         element={user ? <Home user={user} onLoggedOut={() => setUser(null)} /> : <Navigate to="/login" />}

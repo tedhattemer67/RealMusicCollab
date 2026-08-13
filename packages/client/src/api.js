@@ -160,6 +160,14 @@ export function getUsers() {
   return request('/users');
 }
 
+export function checkBootstrapAvailable() {
+  return request('/bootstrap');
+}
+
+export function bootstrapFirstAdmin(data) {
+  return request('/bootstrap', { method: 'POST', body: JSON.stringify(data) });
+}
+
 // The <audio> tag needs a real URL string, not a fetch() call — these two
 // helpers are what was missing when the API base became configurable for
 // deployment. Everything else in this file went through request(), which
