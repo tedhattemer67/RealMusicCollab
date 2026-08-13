@@ -143,3 +143,5 @@ vite.config.ts.timestamp-*
 .vite/
 
 packages/server/local-storage/*.zip
+packages/server/local-storage/*.*
+packages/server/local-storage/*

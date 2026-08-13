@@ -142,7 +142,13 @@ export default function TrackRow({ track, onUploaded, user }) {
         <p style={{ color: 'crimson', fontSize: 13, margin: '4px 0' }}>{approveError}</p>
       )}
 
-      <AnnotationsPanel parentType="track" parentId={track.id} />
+      {track.currentTake && (
+        <AnnotationsPanel
+          parentType="take"
+          parentId={track.currentTake.id}
+          label="Take comments"
+        />
+      )}
 
       {showPreviewPlayer && track.currentTake && (
         <div style={{ marginTop: 6 }}>

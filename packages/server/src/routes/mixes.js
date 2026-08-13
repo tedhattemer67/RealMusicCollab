@@ -1,24 +1,15 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { getOrCreateDefaultLocalConfig, ensureDir, LOCAL_ROOT } = require('../storage');
+const { getDefaultStorageConfig, writeFile } = require('../storage');
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(LOCAL_ROOT, 'mixes', req.params.songId);
-    ensureDir(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-const upload = multer({ storage });
+// Memory storage so the file can go through writeFile() and land on
+// whichever adapter is actually configured, instead of always disk.
+const upload = multer({ storage: multer.memoryStorage() });
 
 // POST /api/songs/:songId/mixes
 // multipart/form-data:
@@ -66,10 +57,15 @@ router.post(
         }
       }
 
-      const storageConfig = await getOrCreateDefaultLocalConfig();
+      const storageConfig = await getDefaultStorageConfig();
       const existingMixCount = await prisma.mix.count({ where: { songId } });
       const mixNumber = existingMixCount + 1;
-      const storageKey = path.relative(LOCAL_ROOT, req.file.path).replace(/\\/g, '/');
+      const storageKey = await writeFile(
+        storageConfig,
+        `mixes/${songId}`,
+        req.file.originalname,
+        req.file.buffer
+      );
 
       const mix = await prisma.mix.create({
         data: {

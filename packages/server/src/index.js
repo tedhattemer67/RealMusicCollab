@@ -1,3 +1,11 @@
+// npm workspace scripts run with the working directory set to
+// packages/server, not the repo root — so dotenv's default "look in the
+// current directory" behavior would miss the real .env file. Prisma has its
+// own separate mechanism for finding it, but that doesn't extend to plain
+// process.env reads anywhere else in this app, hence loading it explicitly
+// here, first, before anything else.
+require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '..', '.env') });
+
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -25,6 +33,11 @@ app.use(
   cors({
     origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
     credentials: true,
+    // Without this, a genuinely cross-origin frontend (once deployed
+    // separately from the API) can't read the server's suggested filename
+    // for downloads — it works fine right now only because Vite's dev
+    // proxy makes this look same-origin to the browser.
+    exposedHeaders: ['Content-Disposition'],
   })
 );
 app.use(express.json());

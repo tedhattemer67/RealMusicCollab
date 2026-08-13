@@ -1,8 +1,7 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
 const prisma = require('../prisma');
-const { getOrCreateDefaultLocalConfig, ensureDir, LOCAL_ROOT } = require('../storage');
+const { getDefaultStorageConfig, writeFile } = require('../storage');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 
@@ -20,19 +19,10 @@ async function resolveSongIdForTrack(req) {
   return { songId: track ? track.songId : undefined };
 }
 
-// Files get written straight to their track's own folder as they're uploaded,
-// named with a timestamp prefix so two uploads never collide.
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(LOCAL_ROOT, req.params.trackId);
-    ensureDir(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-const upload = multer({ storage });
+// Memory storage, not disk storage — the file needs to go through
+// writeFile() so it can land on whichever adapter is actually configured
+// (LOCAL or S3), not always straight to this machine's disk.
+const upload = multer({ storage: multer.memoryStorage() });
 
 // POST /api/tracks/:trackId/takes
 // Requires a logged-in session — uploadedById comes from req.user, not the
@@ -91,16 +81,14 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
       }
     }
 
-    const storageConfig = await getOrCreateDefaultLocalConfig();
+    const storageConfig = await getDefaultStorageConfig();
 
     // takeNumber is sequential per track — computed here, not left to the
     // database, per how we designed it.
     const existingTakeCount = await prisma.take.count({ where: { trackId } });
     const takeNumber = existingTakeCount + 1;
 
-    // Store the path relative to LOCAL_ROOT, not the absolute machine path —
-    // keeps storageKey portable if the app ever runs somewhere else.
-    const storageKey = path.relative(LOCAL_ROOT, req.file.path).replace(/\\/g, '/');
+    const storageKey = await writeFile(storageConfig, trackId, req.file.originalname, req.file.buffer);
 
     const take = await prisma.take.create({
       data: {

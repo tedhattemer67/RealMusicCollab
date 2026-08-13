@@ -1,11 +1,9 @@
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
 const archiver = require('archiver');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { LOCAL_ROOT } = require('../storage');
+const { getReadStream } = require('../storage');
 
 const router = express.Router();
 
@@ -31,7 +29,7 @@ router.post('/songs/:songId/export', requireAuth, async (req, res) => {
       where: { id: songId },
       include: {
         tracks: { select: { id: true, name: true, currentTakeId: true } },
-        currentMix: true,
+        currentMix: { include: { storageConfig: true } },
       },
     });
     if (!song) {
@@ -61,7 +59,7 @@ router.post('/songs/:songId/export', requireAuth, async (req, res) => {
     const takeIds = selections.map((s) => s.takeId);
     const takes = await prisma.take.findMany({
       where: { id: { in: takeIds } },
-      include: { track: true, performedBy: { select: { name: true } } },
+      include: { track: true, performedBy: { select: { name: true } }, storageConfig: true },
     });
     const takeById = new Map(takes.map((t) => [t.id, t]));
 
@@ -82,11 +80,14 @@ router.post('/songs/:songId/export', requireAuth, async (req, res) => {
 
     const manifestLines = [];
 
+    // archive.append() takes a real readable stream — works identically
+    // whether getReadStream() is reading from local disk or fetching from
+    // S3, unlike archive.file() (which only ever worked for local paths).
     for (const sel of selections) {
       const take = takeById.get(sel.takeId);
       if (!take) continue;
-      const filePath = path.join(LOCAL_ROOT, take.storageKey);
-      if (!fs.existsSync(filePath)) continue;
+      const result = await getReadStream(take.storageConfig, take.storageKey);
+      if (!result) continue;
 
       const trackName = take.track.name;
       const filename =
@@ -94,7 +95,7 @@ router.post('/songs/:songId/export', requireAuth, async (req, res) => {
           ? `${trackName}.wav`
           : `${trackName.replace(/\s+/g, '')}_Take${take.takeNumber}.wav`;
 
-      archive.file(filePath, { name: filename });
+      archive.append(result.stream, { name: filename });
 
       if (mode === 'handoff') {
         const recordedStr = take.recordedOn
@@ -109,11 +110,11 @@ router.post('/songs/:songId/export', requireAuth, async (req, res) => {
     }
 
     if (willIncludeMix) {
-      const mixFilePath = path.join(LOCAL_ROOT, song.currentMix.storageKey);
-      if (fs.existsSync(mixFilePath)) {
+      const mixResult = await getReadStream(song.currentMix.storageConfig, song.currentMix.storageKey);
+      if (mixResult) {
         const mixFilename =
           mode === 'handoff' ? `${song.title} (Mix).wav` : `Mix_v${song.currentMix.mixNumber}.wav`;
-        archive.file(mixFilePath, { name: mixFilename });
+        archive.append(mixResult.stream, { name: mixFilename });
         if (mode === 'handoff') {
           manifestLines.push(`Mix: v${song.currentMix.mixNumber} (${song.currentMix.status})`);
         }
@@ -162,10 +163,15 @@ router.post(
             include: {
               tracks: {
                 include: {
-                  takes: { include: { performedBy: { select: { name: true } } } },
+                  takes: {
+                    include: {
+                      performedBy: { select: { name: true } },
+                      storageConfig: true,
+                    },
+                  },
                 },
               },
-              mixes: true,
+              mixes: { include: { storageConfig: true } },
             },
           },
         },
@@ -196,10 +202,10 @@ router.post(
         for (const track of song.tracks) {
           manifestLines.push(`  ${track.name}:`);
           for (const take of track.takes) {
-            const filePath = path.join(LOCAL_ROOT, take.storageKey);
-            if (fs.existsSync(filePath)) {
+            const result = await getReadStream(take.storageConfig, take.storageKey);
+            if (result) {
               const filename = `${song.title}/${track.name}/Take${take.takeNumber}.wav`;
-              archive.file(filePath, { name: filename });
+              archive.append(result.stream, { name: filename });
             }
             const isDefault = take.id === track.currentTakeId ? ' (was current default)' : '';
             manifestLines.push(
@@ -208,10 +214,10 @@ router.post(
           }
         }
         for (const mix of song.mixes) {
-          const mixFilePath = path.join(LOCAL_ROOT, mix.storageKey);
-          if (fs.existsSync(mixFilePath)) {
+          const result = await getReadStream(mix.storageConfig, mix.storageKey);
+          if (result) {
             const filename = `${song.title}/Mix_v${mix.mixNumber}.wav`;
-            archive.file(mixFilePath, { name: filename });
+            archive.append(result.stream, { name: filename });
           }
           manifestLines.push(`  Mix v${mix.mixNumber} — ${mix.status}`);
         }

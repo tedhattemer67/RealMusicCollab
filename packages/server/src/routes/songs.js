@@ -1,11 +1,9 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const multer = require('multer');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { getOrCreateDefaultLocalConfig, ensureDir, LOCAL_ROOT } = require('../storage');
+const { getDefaultStorageConfig, writeFile } = require('../storage');
 const { parseBatchFilenames } = require('../lib/filenameParser');
 
 const router = express.Router();
@@ -233,13 +231,8 @@ router.post('/songs/:songId/tracks', requireAuth, requireRole(UPLOADER_ROLES, (r
 
     const track = await prisma.track.create({ data: { songId, name } });
 
-    const storageConfig = await getOrCreateDefaultLocalConfig();
-    const dir = path.join(LOCAL_ROOT, track.id);
-    ensureDir(dir);
-    const filename = `${Date.now()}-${req.file.originalname}`;
-    const fullPath = path.join(dir, filename);
-    fs.writeFileSync(fullPath, req.file.buffer);
-    const storageKey = path.relative(LOCAL_ROOT, fullPath).replace(/\\/g, '/');
+    const storageConfig = await getDefaultStorageConfig();
+    const storageKey = await writeFile(storageConfig, track.id, req.file.originalname, req.file.buffer);
 
     const take = await prisma.take.create({
       data: {
@@ -367,7 +360,7 @@ router.post(
       }
 
       const fileByName = new Map(req.files.map((f) => [f.originalname, f]));
-      const storageConfig = await getOrCreateDefaultLocalConfig();
+      const storageConfig = await getDefaultStorageConfig();
 
       // One unfreeze request for the whole batch — not one per file.
       let unfreezeRequestCreated = false;
@@ -429,12 +422,7 @@ router.post(
             await prisma.track.update({ where: { id: trackId }, data: { name: item.name } });
           }
 
-          const dir = path.join(LOCAL_ROOT, trackId);
-          ensureDir(dir);
-          const filename = `${Date.now()}-${file.originalname}`;
-          const fullPath = path.join(dir, filename);
-          fs.writeFileSync(fullPath, file.buffer);
-          const storageKey = path.relative(LOCAL_ROOT, fullPath).replace(/\\/g, '/');
+          const storageKey = await writeFile(storageConfig, trackId, file.originalname, file.buffer);
 
           const existingTakeCount = await prisma.take.count({ where: { trackId } });
           const takeNumber = existingTakeCount + 1;

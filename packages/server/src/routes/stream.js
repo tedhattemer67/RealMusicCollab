@@ -3,12 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
-const { LOCAL_ROOT } = require('../storage');
+const { LOCAL_ROOT, getRedirectUrl } = require('../storage');
 
 const router = express.Router();
 
 // Range support is essential, not optional — browsers rely on it for
-// seeking within audio, and some won't play back at all without it.
+// seeking within audio, and some won't play back at all without it. Only
+// needed for LOCAL: an S3 presigned URL already supports Range requests
+// natively, since the browser talks directly to S3 for those.
 function streamLocalFile(req, res, absolutePath) {
   if (!fs.existsSync(absolutePath)) {
     return res.status(404).json({ error: 'File not found on disk.' });
@@ -38,6 +40,26 @@ function streamLocalFile(req, res, absolutePath) {
   }
 }
 
+// Shared by both routes below: redirect to a signed URL when the adapter
+// supports one (S3 — faster, and doesn't route audio bytes through this
+// server at all), otherwise proxy directly from disk (LOCAL, which has no
+// concept of a URL to redirect to).
+async function streamOrRedirect(req, res, storageConfig, storageKey) {
+  const redirectUrl = await getRedirectUrl(storageConfig, storageKey);
+  if (redirectUrl) {
+    return res.redirect(302, redirectUrl);
+  }
+
+  if (storageConfig.type === 'LOCAL') {
+    const absolutePath = path.join(LOCAL_ROOT, storageKey);
+    return streamLocalFile(req, res, absolutePath);
+  }
+
+  res.status(501).json({
+    error: `Streaming for ${storageConfig.type} isn't implemented yet.`,
+  });
+}
+
 // GET /api/takes/:takeId/stream
 router.get('/takes/:takeId/stream', requireAuth, async (req, res) => {
   try {
@@ -48,15 +70,7 @@ router.get('/takes/:takeId/stream', requireAuth, async (req, res) => {
     if (!take) {
       return res.status(404).json({ error: `No take found with id ${req.params.takeId}.` });
     }
-    // Only LOCAL is implemented right now — this fails loudly and clearly
-    // rather than silently mis-serving once S3/Drive adapters exist later.
-    if (take.storageConfig.type !== 'LOCAL') {
-      return res.status(501).json({
-        error: `Streaming for ${take.storageConfig.type} isn't built yet — only LOCAL storage is supported right now.`,
-      });
-    }
-    const absolutePath = path.join(LOCAL_ROOT, take.storageKey);
-    streamLocalFile(req, res, absolutePath);
+    await streamOrRedirect(req, res, take.storageConfig, take.storageKey);
   } catch (err) {
     console.error(err);
     if (!res.headersSent) {
@@ -75,13 +89,7 @@ router.get('/mixes/:mixId/stream', requireAuth, async (req, res) => {
     if (!mix) {
       return res.status(404).json({ error: `No mix found with id ${req.params.mixId}.` });
     }
-    if (mix.storageConfig.type !== 'LOCAL') {
-      return res.status(501).json({
-        error: `Streaming for ${mix.storageConfig.type} isn't built yet — only LOCAL storage is supported right now.`,
-      });
-    }
-    const absolutePath = path.join(LOCAL_ROOT, mix.storageKey);
-    streamLocalFile(req, res, absolutePath);
+    await streamOrRedirect(req, res, mix.storageConfig, mix.storageKey);
   } catch (err) {
     console.error(err);
     if (!res.headersSent) {

@@ -3,10 +3,11 @@ import { getAnnotations, createAnnotation } from '../api';
 
 // Genuinely open to every role, including Viewer — no gating here, since
 // commenting is exactly what Viewer's role is meant to allow.
-export default function AnnotationsPanel({ parentType, parentId }) {
+export default function AnnotationsPanel({ parentType, parentId, label = 'Comments' }) {
   const [open, setOpen] = useState(false);
   const [annotations, setAnnotations] = useState(null);
   const [body, setBody] = useState('');
+  const [timestampSeconds, setTimestampSeconds] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -26,8 +27,13 @@ export default function AnnotationsPanel({ parentType, parentId }) {
     setSubmitting(true);
     setError(null);
     try {
-      await createAnnotation(parentType, parentId, { body });
+      const data = { body };
+      if (parentType === 'take' && timestampSeconds !== '') {
+        data.timestampSeconds = Number(timestampSeconds);
+      }
+      await createAnnotation(parentType, parentId, data);
       setBody('');
+      setTimestampSeconds('');
       load();
     } catch (err) {
       setError(err.message);
@@ -39,7 +45,7 @@ export default function AnnotationsPanel({ parentType, parentId }) {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} style={{ marginLeft: 6, fontSize: 12 }}>
-        Comments
+        {label}
       </button>
     );
   }
@@ -56,7 +62,7 @@ export default function AnnotationsPanel({ parentType, parentId }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <strong>Comments</strong>
+        <strong>{label}</strong>
         <button onClick={() => setOpen(false)} style={{ fontSize: 12 }}>
           Close
         </button>
@@ -76,12 +82,24 @@ export default function AnnotationsPanel({ parentType, parentId }) {
         </ul>
       )}
       <form onSubmit={handleSubmit}>
+        {parentType === 'take' && (
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="sec"
+            value={timestampSeconds}
+            onChange={(e) => setTimestampSeconds(e.target.value)}
+            style={{ width: 50, padding: 4, marginRight: 4 }}
+            title="Optional — a specific point in the audio this comment refers to"
+          />
+        )}
         <input
           type="text"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Add a comment…"
-          style={{ width: '70%', padding: 4 }}
+          style={{ width: '65%', padding: 4 }}
         />
         <button type="submit" disabled={submitting} style={{ marginLeft: 4 }}>
           {submitting ? 'Posting…' : 'Post'}

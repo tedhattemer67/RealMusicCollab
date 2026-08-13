@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
-const { SESSION_COOKIE_NAME, SESSION_DURATION_MS } = require('../constants');
+const { SESSION_COOKIE_NAME, SESSION_DURATION_MS, getSessionCookieOptions } = require('../constants');
 
 const router = express.Router();
 
@@ -41,14 +41,7 @@ router.post('/login', async (req, res) => {
       },
     });
 
-    res.cookie(SESSION_COOKIE_NAME, session.id, {
-      httpOnly: true,
-      sameSite: 'lax',
-      // secure: true belongs here once this runs over HTTPS (e.g. on Render) —
-      // left off for now since local dev is plain http and browsers would
-      // silently refuse to send a secure cookie back over http.
-      maxAge: SESSION_DURATION_MS,
-    });
+    res.cookie(SESSION_COOKIE_NAME, session.id, getSessionCookieOptions());
 
     res.json({
       id: user.id,
@@ -75,7 +68,7 @@ router.post('/logout', async (req, res) => {
         data: { revokedAt: new Date() },
       });
     }
-    res.clearCookie(SESSION_COOKIE_NAME);
+    res.clearCookie(SESSION_COOKIE_NAME, getSessionCookieOptions());
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

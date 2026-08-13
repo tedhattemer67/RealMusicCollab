@@ -1,12 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getProject, getMixApprovals, approveMix, freezeSong, getUnfreezeRequests, requestUnfreeze, resolveUnfreezeRequest } from '../api';
+import { getProject, freezeSong, getUnfreezeRequests, requestUnfreeze, resolveUnfreezeRequest, archiveProject } from '../api';
 import TrackRow from '../components/TrackRow.jsx';
 import Badge from '../components/Badge.jsx';
 import AddTrackForm from '../components/AddTrackForm.jsx';
 import AddSongForm from '../components/AddSongForm.jsx';
 import BatchUploadForm from '../components/BatchUploadForm.jsx';
 import AnnotationsPanel from '../components/AnnotationsPanel.jsx';
+import TodosPanel from '../components/TodosPanel.jsx';
+import MixPanel from '../components/MixPanel.jsx';
+import DownloadPanel from '../components/DownloadPanel.jsx';
 
 function SongStatusBadge({ status }) {
   if (status === 'FROZEN') return <Badge color="blue">frozen</Badge>;
@@ -14,56 +17,8 @@ function SongStatusBadge({ status }) {
   return <Badge color="gray">draft</Badge>;
 }
 
-// Each song needs its own independent approval state, which is why this is
-// a real component rather than logic inlined in a .map() — hooks can't be
-// shared across loop iterations that way.
-function MixApprovalControl({ mix, user }) {
-  const [approvals, setApprovals] = useState(null);
-  const [approving, setApproving] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    getMixApprovals(mix.id)
-      .then(setApprovals)
-      .catch(() => setApprovals(null));
-  }, [mix.id]);
-
-  const myApproval = approvals && user ? approvals.find((a) => a.userId === user.id) : null;
-
-  async function handleApprove() {
-    setApproving(true);
-    setError(null);
-    try {
-      await approveMix(mix.id);
-      const fresh = await getMixApprovals(mix.id);
-      setApprovals(fresh);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setApproving(false);
-    }
-  }
-
-  return (
-    <span style={{ marginLeft: 8 }}>
-      {approvals && approvals.length > 0 && <Badge color="green">approved</Badge>}
-      {approvals && approvals.length === 0 && <Badge color="amber">pending approval</Badge>}
-      {user && user.instanceRole !== 'VIEWER' && (
-        myApproval ? (
-          <span style={{ marginLeft: 6, fontSize: 12, color: '#3b6d11' }}>✓ You approved this</span>
-        ) : (
-          <button onClick={handleApprove} disabled={approving} style={{ marginLeft: 6 }}>
-            {approving ? 'Approving…' : 'Approve mix'}
-          </button>
-        )
-      )}
-      {error && <span style={{ color: 'crimson', fontSize: 12, marginLeft: 6 }}>{error}</span>}
-    </span>
-  );
-}
-
-// Freeze/unfreeze — reuses the same "each song needs independent state"
-// reasoning as MixApprovalControl above.
+// Freeze/unfreeze — each song needs its own independent state, same
+// reasoning as the mix-related components extracted into their own files.
 function FreezeControl({ song, user, onChange }) {
   const [openRequest, setOpenRequest] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -171,12 +126,19 @@ export default function ProjectTree({ user }) {
   const { projectId } = useParams();
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
-  // Which song's mix player is currently shown, if any — a single id
-  // rather than per-song state, since only one is realistically open at once.
-  const [playingMixSongId, setPlayingMixSongId] = useState(null);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState(null);
 
-  function togglePlayMix(songId) {
-    setPlayingMixSongId((cur) => (cur === songId ? null : songId));
+  async function handleArchive() {
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      await archiveProject(projectId);
+    } catch (err) {
+      setArchiveError(err.message);
+    } finally {
+      setArchiving(false);
+    }
   }
 
   const load = useCallback(() => {
@@ -200,6 +162,13 @@ export default function ProjectTree({ user }) {
         <Link to="/">&larr; All projects</Link>
       </p>
       <h2 style={{ fontSize: 18 }}>{project.name}</h2>
+      {user && user.instanceRole === 'ADMIN' && (
+        <button onClick={handleArchive} disabled={archiving} style={{ fontSize: 13, marginBottom: 8 }}>
+          {archiving ? 'Preparing archive…' : 'Archive project'}
+        </button>
+      )}
+      {archiveError && <p style={{ color: 'crimson', fontSize: 13 }}>{archiveError}</p>}
+      <TodosPanel parentType="project" parentId={projectId} label="Project to-dos" />
       {project.songs.length === 0 && <p>No songs yet.</p>}
       <ul>
         {project.songs.map((song) => (
@@ -208,32 +177,11 @@ export default function ProjectTree({ user }) {
               <strong>{song.title}</strong>
               <SongStatusBadge status={song.status} />
               <FreezeControl song={song} user={user} onChange={load} />
-              {song.currentMix && (
-                <span>
-                  {' '}
-                  — mix v{song.currentMix.mixNumber} ({song.currentMix.status})
-                </span>
-              )}
-              {song.currentMix && <MixApprovalControl mix={song.currentMix} user={user} />}
-              <button
-                onClick={() => togglePlayMix(song.id)}
-                disabled={!song.currentMix}
-                style={{ marginLeft: 8 }}
-                title="Plays the song's actual balanced mix, not an isolated track"
-              >
-                {playingMixSongId === song.id ? 'Hide mix' : 'Play mix'}
-              </button>
+              <MixPanel songId={song.id} user={user} onChange={load} />
+              <DownloadPanel songId={song.id} />
             </div>
-            <AnnotationsPanel parentType="song" parentId={song.id} />
-            {playingMixSongId === song.id && song.currentMix && (
-              <div style={{ margin: '6px 0' }}>
-                <audio
-                  controls
-                  src={`/api/mixes/${song.currentMix.id}/stream`}
-                  style={{ width: '100%' }}
-                />
-              </div>
-            )}
+            <AnnotationsPanel parentType="song" parentId={song.id} label="Song comments" />
+            <TodosPanel parentType="song" parentId={song.id} label="Song to-dos" />
             <ul style={{ marginTop: 4 }}>
               {song.tracks.map((track) => (
                 <TrackRow key={track.id} track={track} onUploaded={load} user={user} />
