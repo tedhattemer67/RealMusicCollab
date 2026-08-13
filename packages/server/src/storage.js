@@ -105,7 +105,17 @@ async function writeFile(storageConfig, keyPrefix, originalFilename, buffer) {
   if (storageConfig.type === 'S3') {
     const client = getS3Client(storageConfig.settings);
     await client.send(
-      new PutObjectCommand({ Bucket: storageConfig.settings.bucket, Key: key, Body: buffer })
+      new PutObjectCommand({
+        Bucket: storageConfig.settings.bucket,
+        Key: key,
+        Body: buffer,
+        // Without this, S3 defaults to storing the object as generic
+        // application/octet-stream — the browser then has no way to know
+        // it's allowed to play the file as audio, even though the actual
+        // bytes transfer completely fine (which is why this bug was so
+        // confusing to chase: everything downstream *looked* successful).
+        ContentType: 'audio/wav',
+      })
     );
     return key;
   }
