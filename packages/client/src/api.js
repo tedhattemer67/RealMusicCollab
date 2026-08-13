@@ -160,6 +160,21 @@ export function getUsers() {
   return request('/users');
 }
 
+// The <audio> tag needs a real URL string, not a fetch() call — these two
+// helpers are what was missing when the API base became configurable for
+// deployment. Everything else in this file went through request(), which
+// already used BASE correctly; these were still hardcoded as literal
+// "/api/..." strings directly in the components, which only worked locally
+// because Vite's dev proxy silently forwards that path — the deployed site
+// has no such proxy, so it was quietly hitting the frontend's own domain.
+export function getTakeStreamUrl(takeId) {
+  return `${BASE}/takes/${takeId}/stream`;
+}
+
+export function getMixStreamUrl(mixId) {
+  return `${BASE}/mixes/${mixId}/stream`;
+}
+
 // Downloads return real file bytes (a ZIP), not JSON — read the response as
 // a blob and trigger a real browser download via a temporary link, rather
 // than the normal fetch-and-render pattern every other function here uses.

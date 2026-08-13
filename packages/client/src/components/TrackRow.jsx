@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { getTrackTakes, uploadTake, getTakeApprovals, approveTake } from '../api';
+import { getTrackTakes, uploadTake, getTakeApprovals, approveTake, getTakeStreamUrl } from '../api';
 import Badge from './Badge.jsx';
 import AnnotationsPanel from './AnnotationsPanel.jsx';
 
@@ -152,7 +152,7 @@ export default function TrackRow({ track, onUploaded, user }) {
 
       {showPreviewPlayer && track.currentTake && (
         <div style={{ marginTop: 6 }}>
-          <audio controls src={`/api/takes/${track.currentTake.id}/stream`} style={{ width: '100%' }} />
+          <audio controls src={getTakeStreamUrl(track.currentTake.id)} style={{ width: '100%' }} />
         </div>
       )}
 

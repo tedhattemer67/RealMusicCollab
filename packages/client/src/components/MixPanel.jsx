@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getMixes, createMix, finalizeMix } from '../api';
+import { getMixes, createMix, finalizeMix, getMixStreamUrl } from '../api';
 import MixApprovalControl from './MixApprovalControl.jsx';
 import AnnotationsPanel from './AnnotationsPanel.jsx';
 
@@ -115,7 +115,7 @@ export default function MixPanel({ songId, user, onChange }) {
           </div>
           <audio
             controls
-            src={`/api/mixes/${latest.id}/stream`}
+            src={getMixStreamUrl(latest.id)}
             style={{ width: '100%', marginTop: 4 }}
           />
           <MixApprovalControl mix={latest} user={user} />
@@ -135,7 +135,7 @@ export default function MixPanel({ songId, user, onChange }) {
                   v{m.mixNumber} ({m.status}) —{' '}
                   <audio
                     controls
-                    src={`/api/mixes/${m.id}/stream`}
+                    src={getMixStreamUrl(m.id)}
                     style={{ verticalAlign: 'middle', height: 24, width: 160 }}
                   />
                 </li>
