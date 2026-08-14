@@ -69,8 +69,17 @@ Commit and push this scaffold:
 ```bash
 git add .
 git commit -m "Initial project scaffold with schema.prisma"
+git commit -m "Building the frontend login"
+git commit -m "Deploy web application"
 git push
 ```
+git add .
+git commit -m "Fix Account Issues"
+git push
+
+
+"email":"ted@example.com","password":"changeme123"
+
 
 ## 3. Render — create the Postgres database
 
@@ -87,6 +96,10 @@ git push
 30 days (14-day grace period to upgrade before that happens), capped at 1GB,
 and has no backups. Perfectly fine for proving the schema works; don't let
 real band data live there without upgrading to a paid instance first.
+
+##Restart the server
+npm install
+npm run dev:server
 
 ## 4. Connect Prisma to it and actually test the schema
 
