@@ -69,17 +69,8 @@ Commit and push this scaffold:
 ```bash
 git add .
 git commit -m "Initial project scaffold with schema.prisma"
-git commit -m "Building the frontend login"
-git commit -m "Deploy web application"
 git push
 ```
-git add .
-git commit -m "Fix Account Issues"
-git push
-
-
-"email":"ted@example.com","password":"changeme123"
-
 
 ## 3. Render — create the Postgres database
 
