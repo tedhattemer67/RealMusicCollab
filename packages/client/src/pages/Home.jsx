@@ -3,6 +3,7 @@ import { logout } from '../api';
 import ProjectList from './ProjectList.jsx';
 import ProjectTree from './ProjectTree.jsx';
 import Members from './Members.jsx';
+import ManageProjects from './ManageProjects.jsx';
 import './Home.css';
 
 function initials(name) {
@@ -28,6 +29,9 @@ export default function Home({ user, onLoggedOut }) {
           Projects
         </NavLink>
         <NavLink to="/members">Band</NavLink>
+        {user.instanceRole === 'ADMIN' && (
+          <NavLink to="/manage-projects">Manage Projects</NavLink>
+        )}
         <div className="app-nav-right">
           <span className="tag tag-outline">{user.instanceRole}</span>
           <button
@@ -48,6 +52,7 @@ export default function Home({ user, onLoggedOut }) {
           <Route path="/" element={<ProjectList />} />
           <Route path="/projects/:projectId" element={<ProjectTree user={user} />} />
           <Route path="/members" element={<Members user={user} />} />
+          <Route path="/manage-projects" element={<ManageProjects user={user} />} />
         </Routes>
       </div>
     </div>

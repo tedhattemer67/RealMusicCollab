@@ -135,6 +135,12 @@ model Project {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  // Soft-hide only, no deletion — an Admin can pull a Project out of the
+  // normal project list from the Manage Projects tab without touching any
+  // of its Songs/Tracks/Takes or the files behind them.
+  hidden    Boolean     @default(false)
+  hiddenAt  DateTime?
+
   songs             Song[]
   memberships       Membership[]
   notificationChannels NotificationChannel[]

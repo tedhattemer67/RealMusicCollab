@@ -1,9 +1,9 @@
-.members-page {
+.manage-projects-page {
   max-width: 640px;
   margin: 0 auto;
   padding: 40px 24px;
 }
-.members-list {
+.manage-projects-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -11,9 +11,8 @@
   padding: 0;
   list-style: none;
 }
-.members-list-item {
+.manage-projects-list-item {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;

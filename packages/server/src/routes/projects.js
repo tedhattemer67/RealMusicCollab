@@ -19,6 +19,7 @@ const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 router.get('/projects', requireAuth, async (req, res) => {
   try {
     const projects = await prisma.project.findMany({
+      where: { hidden: false },
       orderBy: { updatedAt: 'desc' },
       select: { id: true, name: true, caption: true, kind: true, updatedAt: true },
     });
@@ -28,6 +29,36 @@ router.get('/projects', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Something went wrong fetching projects.' });
   }
 });
+
+// GET /api/projects/all — every project, hidden included, for the Manage
+// Projects admin tab. Must stay registered here, before GET /projects/:projectId
+// below — that route's :projectId segment would otherwise swallow "all" as
+// a literal id, since Express matches routes in registration order.
+router.get(
+  '/projects/all',
+  requireAuth,
+  requireRole(['ADMIN'], () => ({})),
+  async (req, res) => {
+    try {
+      const projects = await prisma.project.findMany({
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          caption: true,
+          kind: true,
+          updatedAt: true,
+          hidden: true,
+          hiddenAt: true,
+        },
+      });
+      res.json(projects);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Something went wrong fetching projects.' });
+    }
+  }
+);
 
 // GET /api/projects/:projectId — the nested tree the frontend's project view
 // needs: songs, each song's tracks with their current take (not full take
@@ -117,3 +148,39 @@ router.post('/projects/:projectId/songs', requireAuth, requireRole(UPLOADER_ROLE
     res.status(500).json({ error: 'Something went wrong creating the song.' });
   }
 });
+
+// PATCH /api/projects/:projectId — Admin-only hide/unhide toggle for the
+// Manage Projects tab. Hiding only removes a project from GET /projects'
+// normal list — it doesn't restrict GET /projects/:projectId itself, so a
+// direct link still works for anyone who already has it. That's deliberate:
+// this is a list-visibility toggle, not an access-control feature.
+// body: { hidden }
+router.patch(
+  '/projects/:projectId',
+  requireAuth,
+  requireRole(['ADMIN'], (req) => ({ projectId: req.params.projectId })),
+  async (req, res) => {
+    try {
+      const { hidden } = req.body;
+      if (typeof hidden !== 'boolean') {
+        return res.status(400).json({ error: 'hidden must be a boolean.' });
+      }
+
+      const existing = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+      if (!existing) {
+        return res
+          .status(404)
+          .json({ error: `No project found with id ${req.params.projectId}.` });
+      }
+
+      const project = await prisma.project.update({
+        where: { id: req.params.projectId },
+        data: { hidden, hiddenAt: hidden ? new Date() : null },
+      });
+      res.json(project);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Something went wrong updating the project.' });
+    }
+  }
+);

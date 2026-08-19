@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getUsers } from '../api';
 import InviteForm from '../components/InviteForm.jsx';
+import ChangePasswordForm from '../components/ChangePasswordForm.jsx';
+import ResetPasswordControl from '../components/ResetPasswordControl.jsx';
 import './Members.css';
 
 export default function Members({ user }) {
@@ -28,12 +30,18 @@ export default function Members({ user }) {
           <li key={u.id} className="members-list-item">
             <span>{u.name}</span>
             <span className="tag tag-neutral">{u.instanceRole}</span>
+            {user.instanceRole === 'ADMIN' && u.id !== user.id && (
+              <ResetPasswordControl userId={u.id} userName={u.name} />
+            )}
           </li>
         ))}
       </ul>
       {/* Only Admins can actually create an invite on the backend — hiding
           this for everyone else avoids showing a button that would just 403. */}
       {user.instanceRole === 'ADMIN' && <InviteForm />}
+
+      <h3 style={{ marginTop: 32 }}>Your account</h3>
+      <ChangePasswordForm />
     </div>
   );
 }

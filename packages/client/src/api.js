@@ -48,6 +48,24 @@ export function getProject(id) {
   return request(`/projects/${id}`);
 }
 
+export function getAllProjects() {
+  return request('/projects/all');
+}
+
+export function hideProject(projectId) {
+  return request(`/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ hidden: true }),
+  });
+}
+
+export function unhideProject(projectId) {
+  return request(`/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ hidden: false }),
+  });
+}
+
 export function getTrackTakes(trackId) {
   return request(`/tracks/${trackId}/takes`);
 }
@@ -158,6 +176,20 @@ export function updateTodoCompletion(todoId, completed) {
 
 export function getUsers() {
   return request('/users');
+}
+
+export function changePassword(currentPassword, newPassword) {
+  return request('/users/me/password', {
+    method: 'PATCH',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export function resetPassword(userId, newPassword) {
+  return request(`/users/${userId}/password`, {
+    method: 'PATCH',
+    body: JSON.stringify({ newPassword }),
+  });
 }
 
 export function checkBootstrapAvailable() {
