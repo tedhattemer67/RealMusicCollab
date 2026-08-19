@@ -33,56 +33,53 @@ export default function InviteForm() {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} style={{ marginTop: 12, fontSize: 13 }}>
+      <button className="btn btn-ghost" onClick={() => setOpen(true)}>
         + Invite someone
       </button>
     );
   }
 
   return (
-    <div
-      style={{
-        marginTop: 12,
-        fontSize: 14,
-        border: '1px solid #ddd',
-        padding: 12,
-        borderRadius: 6,
-        maxWidth: 400,
-      }}
-    >
+    <div className="card blueprint" style={{ position: 'relative', marginTop: 12, maxWidth: 400 }}>
+      <i className="corner tl" />
+      <i className="corner tr" />
+      <i className="corner bl" />
+      <i className="corner br" />
       {!invite ? (
         <form onSubmit={handleSubmit}>
-          <label style={{ display: 'block', marginBottom: 10 }}>
-            Role this invite grants:{' '}
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label>Role this invite grants</label>
+            <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
               {ROLES.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
               ))}
             </select>
-          </label>
-          <button type="submit" disabled={submitting}>
-            {submitting ? 'Generating…' : 'Generate invite link'}
-          </button>
-          <button type="button" onClick={() => setOpen(false)} style={{ marginLeft: 6 }}>
-            Cancel
-          </button>
-          {error && <p style={{ color: 'crimson', fontSize: 13 }}>{error}</p>}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? 'Generating…' : 'Generate invite link'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+          {error && <p style={{ margin: '6px 0 0', color: 'crimson', fontSize: 13 }}>{error}</p>}
         </form>
       ) : (
         <div>
-          <p style={{ margin: '0 0 8px' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 13 }}>
             Share this link — it's single-use, and grants <strong>{invite.role}</strong>:
           </p>
           <input
+            className="input"
             type="text"
             readOnly
             value={inviteUrl}
             onFocus={(e) => e.target.select()}
-            style={{ width: '100%', padding: 6, fontSize: 13, boxSizing: 'border-box' }}
           />
-          <button onClick={closeAndReset} style={{ marginTop: 10 }}>
+          <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={closeAndReset}>
             Done
           </button>
         </div>

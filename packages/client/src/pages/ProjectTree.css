@@ -1,0 +1,226 @@
+.mono {
+  font: 10px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr 300px;
+  min-height: calc(100vh - 56px);
+}
+
+/* — sidebar / tree — */
+.sidebar {
+  border-right: 1px solid var(--color-divider);
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-header {
+  padding: 0 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar-project-name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 20px;
+  text-transform: uppercase;
+}
+.tree-song {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 14px 16px 4px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+  color: inherit;
+  width: 100%;
+}
+.tree-song:hover {
+  color: var(--color-accent-700);
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  background: none;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+}
+.tree-row:hover {
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+.tree-row.active {
+  border-left-color: var(--color-accent);
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+.tree-take {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.tree-row.active .tree-take {
+  color: var(--color-accent-700);
+}
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px;
+}
+
+/* — main column — */
+.main-col {
+  padding: 28px 36px;
+  overflow: auto;
+}
+.main-col-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.main-col-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tab-row {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--color-divider);
+  margin: 18px 0 20px;
+  overflow-x: auto;
+}
+.tab {
+  padding: 10px 4px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+.tab.active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+}
+
+/* — track list — */
+.trackrow {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.trackrow:last-child {
+  border-bottom: 0;
+}
+.wave {
+  height: 34px;
+  background: repeating-linear-gradient(90deg, var(--color-accent-300) 0 2px, transparent 2px 5px);
+  opacity: 0.75;
+}
+.mix-approval-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* — rail — */
+.rail {
+  border-left: 1px solid var(--color-divider);
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.rail-section-label {
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  margin-bottom: 8px;
+}
+.rail-panel .card {
+  padding: 10px 12px;
+  gap: 4px;
+}
+.rail-panel .input {
+  min-height: 30px;
+  font-size: 13px;
+}
+
+/* — mobile bottom tab bar — */
+.bottombar {
+  display: none;
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  justify-content: space-around;
+  padding: 8px 0;
+}
+.bottombar button {
+  font: 600 10px var(--font-heading);
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.bottombar button.active {
+  color: var(--color-accent);
+}
+
+@media (max-width: 900px) {
+  .workspace-grid {
+    grid-template-columns: 200px 1fr;
+  }
+  .rail {
+    display: none;
+  }
+  .main-col {
+    padding: 22px 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+  .main-col {
+    padding: 16px;
+  }
+  .bottombar {
+    display: flex;
+  }
+}

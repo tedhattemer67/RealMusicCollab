@@ -97,166 +97,164 @@ export default function BatchUploadForm({ songId, tracks, onUploaded }) {
 
   if (step === 'idle') {
     return (
-      <button onClick={() => setStep('picking')} style={{ marginTop: 6, fontSize: 13 }}>
-        + Batch upload
+      <button className="btn btn-secondary" onClick={() => setStep('picking')}>
+        Batch upload
       </button>
     );
   }
 
   if (step === 'picking') {
     return (
-      <div
-        style={{ marginTop: 8, fontSize: 14, border: '1px solid #ddd', padding: 10, borderRadius: 6 }}
-      >
-        <p style={{ margin: '0 0 8px', fontWeight: 500 }}>Batch upload — pick your stem files</p>
-        <input
-          type="file"
-          multiple
-          ref={fileInputRef}
-          accept=".wav,audio/wav"
-          onChange={handleFilesChosen}
-        />
+      <div className="card blueprint" style={{ position: 'relative', marginTop: 8 }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <p className="card-title" style={{ margin: 0 }}>Batch upload — pick your stem files</p>
+        <input type="file" multiple ref={fileInputRef} accept=".wav,audio/wav" onChange={handleFilesChosen} />
         {files.length > 0 && (
-          <p style={{ fontSize: 13, color: '#555', margin: '6px 0' }}>
-            {files.length} file(s) selected
-          </p>
+          <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>{files.length} file(s) selected</p>
         )}
-        <div style={{ marginTop: 8 }}>
-          <button onClick={handlePreview} disabled={loading}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-primary" onClick={handlePreview} disabled={loading}>
             {loading ? 'Checking…' : 'Preview'}
           </button>
-          <button onClick={reset} style={{ marginLeft: 6 }}>
+          <button className="btn btn-secondary" onClick={reset}>
             Cancel
           </button>
         </div>
-        {error && <p style={{ color: 'crimson', fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: 'crimson', fontSize: 13, margin: 0 }}>{error}</p>}
       </div>
     );
   }
 
   if (step === 'review') {
     return (
-      <div
-        style={{ marginTop: 8, fontSize: 13, border: '1px solid #ddd', padding: 10, borderRadius: 6 }}
-      >
-        <p style={{ margin: '0 0 8px', fontWeight: 500 }}>
+      <div className="card blueprint" style={{ position: 'relative', marginTop: 8 }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <p className="card-title" style={{ margin: 0 }}>
           Review before uploading — nothing has been saved yet
         </p>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
-              <th style={{ padding: 4 }}>File</th>
-              <th style={{ padding: 4 }}>Track name</th>
-              <th style={{ padding: 4 }}>Target</th>
-              <th style={{ padding: 4 }}>Performer</th>
-              <th style={{ padding: 4 }}>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={row.filename} style={{ borderBottom: '1px solid #eee' }}>
-                <td
-                  style={{
-                    padding: 4,
-                    maxWidth: 160,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                  title={row.filename}
-                >
-                  {row.filename}
-                </td>
-                <td style={{ padding: 4 }}>
-                  <input
-                    type="text"
-                    value={row.name}
-                    onChange={(e) => updateRow(i, { name: e.target.value })}
-                    style={{ width: 120, padding: 3 }}
-                  />
-                </td>
-                <td style={{ padding: 4 }}>
-                  <select
-                    value={row.targetMode === 'existing' ? row.trackId : 'new'}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === 'new') {
-                        updateRow(i, { targetMode: 'new', trackId: '' });
-                      } else {
-                        updateRow(i, { targetMode: 'existing', trackId: val });
-                      }
-                    }}
-                  >
-                    <option value="new">+ New track</option>
-                    {tracks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        Add take: {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td style={{ padding: 4 }}>
-                  <select
-                    value={row.performedById}
-                    onChange={(e) => updateRow(i, { performedById: e.target.value })}
-                  >
-                    <option value="">(me)</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td style={{ padding: 4 }}>
-                  <input
-                    type="text"
-                    value={row.note}
-                    onChange={(e) => updateRow(i, { note: e.target.value })}
-                    style={{ width: 120, padding: 3 }}
-                  />
-                </td>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Track name</th>
+                <th>Target</th>
+                <th>Performer</th>
+                <th>Note</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <div style={{ marginTop: 10 }}>
-          <button onClick={handleConfirmUpload} disabled={loading}>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={row.filename}>
+                  <td
+                    style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    title={row.filename}
+                  >
+                    {row.filename}
+                  </td>
+                  <td>
+                    <input
+                      className="input"
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => updateRow(i, { name: e.target.value })}
+                      style={{ minHeight: 32, width: 120 }}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      className="input"
+                      style={{ minHeight: 32 }}
+                      value={row.targetMode === 'existing' ? row.trackId : 'new'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'new') {
+                          updateRow(i, { targetMode: 'new', trackId: '' });
+                        } else {
+                          updateRow(i, { targetMode: 'existing', trackId: val });
+                        }
+                      }}
+                    >
+                      <option value="new">+ New track</option>
+                      {tracks.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          Add take: {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <select
+                      className="input"
+                      style={{ minHeight: 32 }}
+                      value={row.performedById}
+                      onChange={(e) => updateRow(i, { performedById: e.target.value })}
+                    >
+                      <option value="">(me)</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      className="input"
+                      type="text"
+                      value={row.note}
+                      onChange={(e) => updateRow(i, { note: e.target.value })}
+                      style={{ minHeight: 32, width: 120 }}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-primary" onClick={handleConfirmUpload} disabled={loading}>
             {loading ? 'Uploading…' : `Upload ${rows.length} file(s)`}
           </button>
-          <button onClick={reset} style={{ marginLeft: 6 }}>
+          <button className="btn btn-secondary" onClick={reset}>
             Cancel
           </button>
         </div>
-        {error && <p style={{ color: 'crimson', fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: 'crimson', fontSize: 13, margin: 0 }}>{error}</p>}
       </div>
     );
   }
 
   if (step === 'done') {
     return (
-      <div
-        style={{ marginTop: 8, fontSize: 13, border: '1px solid #ddd', padding: 10, borderRadius: 6 }}
-      >
-        <p style={{ margin: '0 0 8px', fontWeight: 500 }}>Batch upload complete</p>
+      <div className="card blueprint" style={{ position: 'relative', marginTop: 8 }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <p className="card-title" style={{ margin: 0 }}>Batch upload complete</p>
         <ul style={{ margin: 0, paddingLeft: 18 }}>
           {results.results.map((r) => (
-            <li key={r.filename} style={{ color: r.error ? 'crimson' : '#2a7' }}>
+            <li key={r.filename} style={{ color: r.error ? 'crimson' : 'inherit', fontSize: 13 }}>
               {r.filename}
               {r.error
                 ? ` — ${r.error}`
-                : ` — take ${r.takeNumber}${
-                    r.promotedToDefault ? ' (set as default)' : ' (pending promotion)'
-                  }`}
+                : ` — take ${r.takeNumber}${r.promotedToDefault ? ' (set as default)' : ' (pending promotion)'}`}
             </li>
           ))}
         </ul>
         {results.unfreezeRequestCreated && (
-          <p style={{ color: '#854f0b', fontSize: 13, marginTop: 6 }}>
+          <p style={{ color: 'var(--color-accent-700)', fontSize: 13, margin: 0 }}>
             This song was frozen — an unfreeze request was created.
           </p>
         )}
-        <button onClick={reset} style={{ marginTop: 8 }}>
+        <button className="btn btn-secondary" onClick={reset}>
           Close
         </button>
       </div>

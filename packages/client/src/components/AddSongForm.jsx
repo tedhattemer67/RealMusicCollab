@@ -29,32 +29,30 @@ export default function AddSongForm({ projectId, onCreated }) {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} style={{ marginTop: 12, fontSize: 13 }}>
+      <button className="btn btn-ghost" onClick={() => setOpen(true)}>
         + New song
       </button>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ marginTop: 12, fontSize: 14 }}>
+    <form onSubmit={handleSubmit} className="card" style={{ marginTop: 12 }}>
       <input
+        className="input"
         type="text"
         placeholder="Song title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        style={{ padding: 4, marginRight: 6 }}
       />
-      <button type="submit" disabled={submitting} style={{ padding: '4px 10px' }}>
-        {submitting ? 'Creating…' : 'Create'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setOpen(false)}
-        style={{ marginLeft: 6, padding: '4px 10px' }}
-      >
-        Cancel
-      </button>
-      {error && <p style={{ color: 'crimson', fontSize: 13, margin: '4px 0' }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? 'Creating…' : 'Create'}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      {error && <p style={{ margin: 0, color: 'crimson', fontSize: 13 }}>{error}</p>}
     </form>
   );
 }

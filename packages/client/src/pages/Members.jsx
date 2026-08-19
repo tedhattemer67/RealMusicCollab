@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getUsers } from '../api';
 import InviteForm from '../components/InviteForm.jsx';
+import './Members.css';
 
 export default function Members({ user }) {
   const [users, setUsers] = useState(null);
@@ -16,16 +17,17 @@ export default function Members({ user }) {
     load();
   }, [load]);
 
-  if (error) return <p style={{ color: 'crimson' }}>{error}</p>;
-  if (!users) return <p>Loading…</p>;
+  if (error) return <p style={{ color: 'crimson', padding: 24 }}>{error}</p>;
+  if (!users) return <p className="text-muted" style={{ padding: 24 }}>Loading…</p>;
 
   return (
-    <div>
-      <h2 style={{ fontSize: 18 }}>Band members</h2>
-      <ul>
+    <div className="members-page">
+      <h2>Band members</h2>
+      <ul className="members-list">
         {users.map((u) => (
-          <li key={u.id} style={{ marginBottom: 6 }}>
-            {u.name} — <em>{u.instanceRole}</em>
+          <li key={u.id} className="members-list-item">
+            <span>{u.name}</span>
+            <span className="tag tag-neutral">{u.instanceRole}</span>
           </li>
         ))}
       </ul>

@@ -1,6 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getProject, freezeSong, getUnfreezeRequests, requestUnfreeze, resolveUnfreezeRequest, archiveProject } from '../api';
+import {
+  getProject,
+  freezeSong,
+  getUnfreezeRequests,
+  requestUnfreeze,
+  resolveUnfreezeRequest,
+  archiveProject,
+  getMixStreamUrl,
+} from '../api';
 import TrackRow from '../components/TrackRow.jsx';
 import Badge from '../components/Badge.jsx';
 import AddTrackForm from '../components/AddTrackForm.jsx';
@@ -10,11 +18,26 @@ import AnnotationsPanel from '../components/AnnotationsPanel.jsx';
 import TodosPanel from '../components/TodosPanel.jsx';
 import MixPanel from '../components/MixPanel.jsx';
 import DownloadPanel from '../components/DownloadPanel.jsx';
+import MixApprovalControl from '../components/MixApprovalControl.jsx';
+import './ProjectTree.css';
+
+const DESKTOP_TABS = [
+  { key: 'tracks', label: 'Tracks' },
+  { key: 'mixes', label: 'Mixes' },
+  { key: 'todos', label: 'To-dos' },
+  { key: 'activity', label: 'Activity' },
+];
+const MOBILE_TABS = [
+  { key: 'tracks', label: 'Tracks' },
+  { key: 'mixes', label: 'Mixes' },
+  { key: 'todos', label: 'To-dos' },
+  { key: 'notes', label: 'Notes' },
+];
 
 function SongStatusBadge({ status }) {
-  if (status === 'FROZEN') return <Badge color="blue">frozen</Badge>;
-  if (status === 'PENDING_REAPPROVAL') return <Badge color="amber">pending re-approval</Badge>;
-  return <Badge color="gray">draft</Badge>;
+  if (status === 'FROZEN') return <Badge variant="accent">frozen</Badge>;
+  if (status === 'PENDING_REAPPROVAL') return <Badge variant="outline">pending re-approval</Badge>;
+  return <Badge variant="neutral">draft</Badge>;
 }
 
 // Freeze/unfreeze — each song needs its own independent state, same
@@ -88,35 +111,74 @@ function FreezeControl({ song, user, onChange }) {
   }
 
   return (
-    <span style={{ marginLeft: 8 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       {(song.status === 'DRAFT' || song.status === 'PENDING_REAPPROVAL') && isAdmin && (
-        <button onClick={handleFreeze} disabled={busy}>
+        <button className="btn btn-primary blueprint" style={{ position: 'relative' }} onClick={handleFreeze} disabled={busy}>
           {busy ? 'Freezing…' : 'Freeze'}
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
         </button>
       )}
       {song.status === 'FROZEN' && loaded && !openRequest && (
-        <button onClick={handleRequestUnfreeze} disabled={busy}>
+        <button className="btn btn-secondary" onClick={handleRequestUnfreeze} disabled={busy}>
           {busy ? 'Requesting…' : 'Request unfreeze'}
         </button>
       )}
       {song.status === 'FROZEN' && openRequest && (
-        <span style={{ fontSize: 12, color: '#854f0b', marginLeft: 4 }}>
+        <span className="text-muted" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           Unfreeze requested by {openRequest.requestedBy?.name || 'someone'}
           {isAdmin && (
             <>
-              {' '}
-              <button onClick={() => handleResolve(true)} disabled={busy} style={{ marginLeft: 4 }}>
+              <button className="btn btn-secondary" onClick={() => handleResolve(true)} disabled={busy}>
                 Approve
               </button>
-              <button onClick={() => handleResolve(false)} disabled={busy} style={{ marginLeft: 4 }}>
+              <button className="btn btn-secondary" onClick={() => handleResolve(false)} disabled={busy}>
                 Deny
               </button>
             </>
           )}
         </span>
       )}
-      {error && <span style={{ color: 'crimson', fontSize: 12, marginLeft: 6 }}>{error}</span>}
+      {error && <span style={{ color: 'crimson', fontSize: 12 }}>{error}</span>}
     </span>
+  );
+}
+
+// Compact "current mix" summary shown under the Tracks tab — a Listen
+// toggle plus the same approval control the full Mixes tab uses.
+function MixApprovalSummary({ song, user }) {
+  const [showPlayer, setShowPlayer] = useState(false);
+  const mix = song.currentMix;
+  if (!mix) return null;
+
+  return (
+    <div style={{ marginTop: 22 }}>
+      <h4 style={{ margin: '0 0 10px' }}>Mix approval</h4>
+      <div className="card blueprint mix-approval-card" style={{ position: 'relative' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <div>
+          <div className="card-title">Mix v{mix.mixNumber}</div>
+          <div className="text-muted" style={{ fontSize: 13 }}>
+            Printed from {song.tracks.length} current take{song.tracks.length === 1 ? '' : 's'} ·{' '}
+            {mix.status === 'DRAFT' ? 'awaiting approval' : mix.status.toLowerCase()}
+          </div>
+          {showPlayer && (
+            <audio controls src={getMixStreamUrl(mix.id)} style={{ width: '100%', marginTop: 8 }} />
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => setShowPlayer((s) => !s)}>
+            {showPlayer ? 'Hide' : 'Listen'}
+          </button>
+          <MixApprovalControl mix={mix} user={user} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -128,6 +190,10 @@ export default function ProjectTree({ user }) {
   const [error, setError] = useState(null);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState(null);
+
+  const [selectedSongId, setSelectedSongId] = useState(null);
+  const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [activeTab, setActiveTab] = useState('tracks');
 
   async function handleArchive() {
     setArchiving(true);
@@ -150,49 +216,198 @@ export default function ProjectTree({ user }) {
   useEffect(() => {
     setProject(null);
     setError(null);
+    setSelectedSongId(null);
+    setSelectedTrackId(null);
     load();
   }, [load]);
 
+  // Keep the selected song valid as the project reloads (e.g. after a song
+  // is added, or on first load) — defaults to the first song.
+  useEffect(() => {
+    if (!project) return;
+    if (!project.songs.find((s) => s.id === selectedSongId)) {
+      setSelectedSongId(project.songs[0]?.id ?? null);
+      setSelectedTrackId(null);
+    }
+  }, [project, selectedSongId]);
+
+  function selectSong(songId) {
+    setSelectedSongId(songId);
+    setSelectedTrackId(null);
+    setActiveTab('tracks');
+  }
+
+  function selectTrack(songId, trackId) {
+    setSelectedSongId(songId);
+    setSelectedTrackId(trackId);
+    setActiveTab('tracks');
+  }
+
   if (error) return <p style={{ color: 'crimson' }}>{error}</p>;
-  if (!project) return <p>Loading…</p>;
+  if (!project) return <p className="text-muted">Loading…</p>;
+
+  const selectedSong = project.songs.find((s) => s.id === selectedSongId) || null;
 
   return (
-    <div>
-      <p>
-        <Link to="/">&larr; All projects</Link>
-      </p>
-      <h2 style={{ fontSize: 18 }}>{project.name}</h2>
-      {user && user.instanceRole === 'ADMIN' && (
-        <button onClick={handleArchive} disabled={archiving} style={{ fontSize: 13, marginBottom: 8 }}>
-          {archiving ? 'Preparing archive…' : 'Archive project'}
-        </button>
-      )}
-      {archiveError && <p style={{ color: 'crimson', fontSize: 13 }}>{archiveError}</p>}
-      <TodosPanel parentType="project" parentId={projectId} label="Project to-dos" />
-      {project.songs.length === 0 && <p>No songs yet.</p>}
-      <ul>
+    <div className="workspace-grid">
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <span className="mono text-muted">Project</span>
+          <span className="sidebar-project-name">{project.name}</span>
+          <p style={{ margin: '4px 0 0' }}>
+            <Link to="/" style={{ fontSize: 12 }}>&larr; All projects</Link>
+          </p>
+          {user && user.instanceRole === 'ADMIN' && (
+            <button
+              className="btn btn-ghost"
+              style={{ alignSelf: 'flex-start', paddingInline: 0 }}
+              onClick={handleArchive}
+              disabled={archiving}
+            >
+              {archiving ? 'Preparing archive…' : 'Archive project'}
+            </button>
+          )}
+          {archiveError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{archiveError}</p>}
+        </div>
+
+        {project.songs.length === 0 && (
+          <p className="text-muted" style={{ padding: '0 16px', fontSize: 13 }}>No songs yet.</p>
+        )}
+
         {project.songs.map((song) => (
-          <li key={song.id} style={{ marginBottom: 16 }}>
-            <div>
-              <strong>{song.title}</strong>
-              <SongStatusBadge status={song.status} />
-              <FreezeControl song={song} user={user} onChange={load} />
-              <MixPanel songId={song.id} user={user} onChange={load} />
-              <DownloadPanel songId={song.id} />
+          <div key={song.id}>
+            <button className="tree-song" onClick={() => selectSong(song.id)}>
+              {song.title}
+            </button>
+            {song.tracks.map((track) => (
+              <button
+                key={track.id}
+                className={`tree-row${selectedTrackId === track.id ? ' active' : ''}`}
+                onClick={() => selectTrack(song.id, track.id)}
+              >
+                {track.name}
+                <span className="mono tree-take">
+                  {track.currentTake ? `take ${track.currentTake.takeNumber}` : 'no take'}
+                </span>
+              </button>
+            ))}
+            <div style={{ padding: '4px 16px 0' }}>
+              <AddTrackForm songId={song.id} onCreated={load} />
             </div>
-            <AnnotationsPanel parentType="song" parentId={song.id} label="Song comments" />
-            <TodosPanel parentType="song" parentId={song.id} label="Song to-dos" />
-            <ul style={{ marginTop: 4 }}>
-              {song.tracks.map((track) => (
-                <TrackRow key={track.id} track={track} onUploaded={load} user={user} />
-              ))}
-            </ul>
-            <AddTrackForm songId={song.id} onCreated={load} />
-            <BatchUploadForm songId={song.id} tracks={song.tracks} onUploaded={load} />
-          </li>
+          </div>
         ))}
-      </ul>
-      <AddSongForm projectId={projectId} onCreated={load} />
+
+        <div style={{ padding: '4px 16px 0' }}>
+          <AddSongForm projectId={projectId} onCreated={load} />
+        </div>
+
+        <div className="sidebar-footer">
+          <TodosPanel parentType="project" parentId={projectId} label="Project to-dos" />
+        </div>
+      </div>
+
+      {selectedSong && (
+        <>
+          <div className="main-col">
+            <div className="main-col-header">
+              <div>
+                <span className="mono text-muted">Song</span>
+                <h2 style={{ margin: 0, fontSize: 28 }}>{selectedSong.title}</h2>
+              </div>
+              <div className="main-col-actions">
+                <SongStatusBadge status={selectedSong.status} />
+                <BatchUploadForm songId={selectedSong.id} tracks={selectedSong.tracks} onUploaded={load} />
+                <DownloadPanel songId={selectedSong.id} />
+                <FreezeControl song={selectedSong} user={user} onChange={load} />
+              </div>
+            </div>
+
+            <div className="tab-row">
+              {DESKTOP_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  className={`tab${activeTab === tab.key ? ' active' : ''}`}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'tracks' && (
+              <>
+                <div className="card blueprint" style={{ position: 'relative', padding: '4px 18px' }}>
+                  <i className="corner tl" />
+                  <i className="corner tr" />
+                  <i className="corner bl" />
+                  <i className="corner br" />
+                  {selectedSong.tracks.length === 0 && (
+                    <p className="text-muted" style={{ padding: '12px 0' }}>No tracks yet.</p>
+                  )}
+                  <ul style={{ margin: 0, padding: 0 }}>
+                    {selectedSong.tracks.map((track) => (
+                      <TrackRow key={track.id} track={track} onUploaded={load} user={user} />
+                    ))}
+                  </ul>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <AddTrackForm songId={selectedSong.id} onCreated={load} />
+                </div>
+                <MixApprovalSummary song={selectedSong} user={user} />
+              </>
+            )}
+
+            {activeTab === 'mixes' && (
+              <MixPanel songId={selectedSong.id} user={user} onChange={load} embedded />
+            )}
+
+            {activeTab === 'todos' && (
+              <TodosPanel parentType="song" parentId={selectedSong.id} label="Song to-dos" embedded />
+            )}
+
+            {activeTab === 'activity' && (
+              <div className="card blueprint" style={{ position: 'relative' }}>
+                <i className="corner tl" />
+                <i className="corner tr" />
+                <i className="corner bl" />
+                <i className="corner br" />
+                <p className="text-muted" style={{ margin: 0 }}>Activity log — coming soon.</p>
+              </div>
+            )}
+
+            {activeTab === 'notes' && (
+              <AnnotationsPanel parentType="song" parentId={selectedSong.id} label="Notes" embedded />
+            )}
+          </div>
+
+          <div className="rail">
+            <div>
+              <div className="mono rail-section-label">To-dos</div>
+              <div className="rail-panel">
+                <TodosPanel parentType="song" parentId={selectedSong.id} label="Song to-dos" embedded />
+              </div>
+            </div>
+            <div>
+              <div className="mono rail-section-label">Notes</div>
+              <div className="rail-panel">
+                <AnnotationsPanel parentType="song" parentId={selectedSong.id} label="Notes" embedded />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="bottombar">
+        {MOBILE_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            className={activeTab === tab.key ? 'active' : ''}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

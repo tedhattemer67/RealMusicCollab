@@ -33,19 +33,19 @@ export default function MixApprovalControl({ mix, user }) {
   }
 
   return (
-    <span style={{ marginLeft: 8 }}>
-      {approvals && approvals.length > 0 && <Badge color="green">approved</Badge>}
-      {approvals && approvals.length === 0 && <Badge color="amber">pending approval</Badge>}
-      {user && user.instanceRole !== 'VIEWER' && (
-        myApproval ? (
-          <span style={{ marginLeft: 6, fontSize: 12, color: '#3b6d11' }}>✓ You approved this</span>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      {approvals && approvals.length > 0 && <Badge variant="accent">approved</Badge>}
+      {approvals && approvals.length === 0 && <Badge variant="outline">pending approval</Badge>}
+      {user &&
+        user.instanceRole !== 'VIEWER' &&
+        (myApproval ? (
+          <span className="text-muted" style={{ fontSize: 12 }}>✓ You approved this</span>
         ) : (
-          <button onClick={handleApprove} disabled={approving} style={{ marginLeft: 6 }}>
-            {approving ? 'Approving…' : 'Approve mix'}
+          <button className="btn btn-primary" onClick={handleApprove} disabled={approving}>
+            {approving ? 'Approving…' : 'Approve'}
           </button>
-        )
-      )}
-      {error && <span style={{ color: 'crimson', fontSize: 12, marginLeft: 6 }}>{error}</span>}
+        ))}
+      {error && <span style={{ color: 'crimson', fontSize: 12 }}>{error}</span>}
     </span>
   );
 }

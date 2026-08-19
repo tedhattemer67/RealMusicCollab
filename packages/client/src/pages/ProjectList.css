@@ -1,0 +1,22 @@
+.project-list-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 20px 0;
+  padding: 0;
+  list-style: none;
+}
+.project-list-item {
+  padding: 14px 16px;
+}
+.project-list-item a {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 17px;
+  text-decoration: none;
+}

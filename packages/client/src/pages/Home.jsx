@@ -1,8 +1,18 @@
-import { Routes, Route, Link } from 'react-router-dom';
+import { Routes, Route, NavLink } from 'react-router-dom';
 import { logout } from '../api';
 import ProjectList from './ProjectList.jsx';
 import ProjectTree from './ProjectTree.jsx';
 import Members from './Members.jsx';
+import './Home.css';
+
+function initials(name) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('');
+}
 
 export default function Home({ user, onLoggedOut }) {
   async function handleLogout() {
@@ -11,33 +21,35 @@ export default function Home({ user, onLoggedOut }) {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 24,
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 20, margin: 0 }}>Logged in as {user.name}</h1>
-          <p style={{ color: '#555', margin: 0 }}>Role: {user.instanceRole}</p>
+    <div className="app-shell">
+      <div className="nav app-nav">
+        <span className="nav-brand">Real Music Collab</span>
+        <NavLink to="/" end>
+          Projects
+        </NavLink>
+        <NavLink to="/members">Band</NavLink>
+        <div className="app-nav-right">
+          <span className="tag tag-outline">{user.instanceRole}</span>
+          <button
+            className="btn btn-icon blueprint avatar-chip"
+            onClick={handleLogout}
+            title={`Log out (${user.name})`}
+          >
+            {initials(user.name)}
+            <i className="corner tl" />
+            <i className="corner tr" />
+            <i className="corner bl" />
+            <i className="corner br" />
+          </button>
         </div>
-        <button onClick={handleLogout} style={{ padding: '8px 16px' }}>
-          Log out
-        </button>
       </div>
-      <nav style={{ marginBottom: 16, fontSize: 14 }}>
-        <Link to="/">Projects</Link>
-        {' | '}
-        <Link to="/members">Band</Link>
-      </nav>
-      <Routes>
-        <Route path="/" element={<ProjectList />} />
-        <Route path="/projects/:projectId" element={<ProjectTree user={user} />} />
-        <Route path="/members" element={<Members user={user} />} />
-      </Routes>
+      <div className="app-content">
+        <Routes>
+          <Route path="/" element={<ProjectList />} />
+          <Route path="/projects/:projectId" element={<ProjectTree user={user} />} />
+          <Route path="/members" element={<Members user={user} />} />
+        </Routes>
+      </div>
     </div>
   );
 }

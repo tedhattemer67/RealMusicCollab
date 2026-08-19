@@ -3,8 +3,8 @@ import { getMixes, createMix, finalizeMix, getMixStreamUrl } from '../api';
 import MixApprovalControl from './MixApprovalControl.jsx';
 import AnnotationsPanel from './AnnotationsPanel.jsx';
 
-export default function MixPanel({ songId, user, onChange }) {
-  const [open, setOpen] = useState(false);
+export default function MixPanel({ songId, user, onChange, embedded = false }) {
+  const [open, setOpen] = useState(embedded);
   const [mixes, setMixes] = useState(null);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
@@ -16,6 +16,10 @@ export default function MixPanel({ songId, user, onChange }) {
       .then(setMixes)
       .catch((err) => setError(err.message));
   }, [songId]);
+
+  useEffect(() => {
+    if (embedded) setOpen(true);
+  }, [embedded]);
 
   useEffect(() => {
     if (open) load();
@@ -69,75 +73,72 @@ export default function MixPanel({ songId, user, onChange }) {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} style={{ marginLeft: 6, fontSize: 12 }}>
+      <button className="btn btn-secondary" onClick={() => setOpen(true)}>
         Mixes
       </button>
     );
   }
 
   return (
-    <div
-      style={{
-        marginTop: 6,
-        fontSize: 13,
-        border: '1px solid #ddd',
-        padding: 8,
-        borderRadius: 6,
-        maxWidth: 460,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <strong>Mixes</strong>
-        <button onClick={() => setOpen(false)} style={{ fontSize: 12 }}>
-          Close
-        </button>
-      </div>
+    <div className={embedded ? '' : 'card blueprint'} style={embedded ? undefined : { position: 'relative', marginTop: 8, maxWidth: 460 }}>
+      {!embedded && (
+        <>
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="card-title">Mixes</span>
+            <button className="btn btn-ghost" onClick={() => setOpen(false)}>
+              Close
+            </button>
+          </div>
+        </>
+      )}
 
-      {!mixes && <p>Loading…</p>}
-      {mixes && mixes.length === 0 && <p style={{ color: '#777' }}>No mixes yet.</p>}
+      {!mixes && <p className="text-muted" style={{ fontSize: 13 }}>Loading…</p>}
+      {mixes && mixes.length === 0 && <p className="text-muted" style={{ fontSize: 13 }}>No mixes yet.</p>}
 
       {latest && (
-        <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #eee' }}>
-          <div>
-            <strong>
+        <div className="card blueprint" style={{ position: 'relative' }}>
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="card-title">
               v{latest.mixNumber} ({latest.status})
-            </strong>{' '}
-            — uploaded by {latest.uploadedBy?.name || 'someone'}
+            </span>
+            <span className="text-muted" style={{ fontSize: 12 }}>
+              uploaded by {latest.uploadedBy?.name || 'someone'}
+            </span>
             {latest.status === 'DRAFT' && isAdmin && (
               <button
+                className="btn btn-secondary"
                 onClick={() => handleFinalize(latest.id)}
                 disabled={finalizing === latest.id}
-                style={{ marginLeft: 6 }}
               >
                 {finalizing === latest.id ? 'Finalizing…' : 'Finalize'}
               </button>
             )}
           </div>
-          <audio
-            controls
-            src={getMixStreamUrl(latest.id)}
-            style={{ width: '100%', marginTop: 4 }}
-          />
+          <audio controls src={getMixStreamUrl(latest.id)} style={{ width: '100%' }} />
           <MixApprovalControl mix={latest} user={user} />
           <AnnotationsPanel parentType="mix" parentId={latest.id} label="Mix comments" />
         </div>
       )}
 
       {older.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <p style={{ fontSize: 12, color: '#777', margin: '0 0 4px' }}>Earlier versions:</p>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        <div>
+          <p className="text-muted" style={{ fontSize: 12, margin: '8px 0 4px' }}>Earlier versions:</p>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {older
               .slice()
               .reverse()
               .map((m) => (
-                <li key={m.id} style={{ marginBottom: 4, fontSize: 12 }}>
-                  v{m.mixNumber} ({m.status}) —{' '}
-                  <audio
-                    controls
-                    src={getMixStreamUrl(m.id)}
-                    style={{ verticalAlign: 'middle', height: 24, width: 160 }}
-                  />
+                <li key={m.id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  v{m.mixNumber} ({m.status})
+                  <audio controls src={getMixStreamUrl(m.id)} style={{ height: 28, width: 180 }} />
                 </li>
               ))}
           </ul>
@@ -145,12 +146,12 @@ export default function MixPanel({ songId, user, onChange }) {
       )}
 
       {canCreate && (
-        <form onSubmit={handleCreate}>
+        <form onSubmit={handleCreate} style={{ marginTop: 8 }}>
           <input type="file" ref={fileInputRef} accept=".wav,audio/wav" />
-          <button type="submit" disabled={uploading} style={{ marginLeft: 4 }}>
+          <button type="submit" className="btn btn-primary" disabled={uploading} style={{ marginLeft: 6 }}>
             {uploading ? 'Uploading…' : 'Upload new mix'}
           </button>
-          <p style={{ fontSize: 11, color: '#777', margin: '4px 0 0' }}>
+          <p className="text-muted" style={{ fontSize: 11, margin: '4px 0 0' }}>
             Uses each track's current default take automatically.
           </p>
         </form>

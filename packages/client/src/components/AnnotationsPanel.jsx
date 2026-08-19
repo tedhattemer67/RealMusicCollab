@@ -3,8 +3,8 @@ import { getAnnotations, createAnnotation } from '../api';
 
 // Genuinely open to every role, including Viewer — no gating here, since
 // commenting is exactly what Viewer's role is meant to allow.
-export default function AnnotationsPanel({ parentType, parentId, label = 'Comments' }) {
-  const [open, setOpen] = useState(false);
+export default function AnnotationsPanel({ parentType, parentId, label = 'Comments', embedded = false }) {
+  const [open, setOpen] = useState(embedded);
   const [annotations, setAnnotations] = useState(null);
   const [body, setBody] = useState('');
   const [timestampSeconds, setTimestampSeconds] = useState('');
@@ -16,6 +16,10 @@ export default function AnnotationsPanel({ parentType, parentId, label = 'Commen
       .then(setAnnotations)
       .catch((err) => setError(err.message));
   }, [parentType, parentId]);
+
+  useEffect(() => {
+    if (embedded) setOpen(true);
+  }, [embedded]);
 
   useEffect(() => {
     if (open) load();
@@ -44,68 +48,72 @@ export default function AnnotationsPanel({ parentType, parentId, label = 'Commen
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} style={{ marginLeft: 6, fontSize: 12 }}>
+      <button className="btn btn-ghost" onClick={() => setOpen(true)}>
         {label}
       </button>
     );
   }
 
   return (
-    <div
-      style={{
-        marginTop: 6,
-        fontSize: 13,
-        border: '1px solid #ddd',
-        padding: 8,
-        borderRadius: 6,
-        maxWidth: 420,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <strong>{label}</strong>
-        <button onClick={() => setOpen(false)} style={{ fontSize: 12 }}>
-          Close
-        </button>
-      </div>
-      {!annotations && <p>Loading…</p>}
+    <div className={embedded ? '' : 'card blueprint'} style={embedded ? undefined : { position: 'relative', marginTop: 8, maxWidth: 420 }}>
+      {!embedded && (
+        <>
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="card-title">{label}</span>
+            <button className="btn btn-ghost" onClick={() => setOpen(false)}>
+              Close
+            </button>
+          </div>
+        </>
+      )}
+      {!annotations && <p className="text-muted" style={{ fontSize: 13 }}>Loading…</p>}
       {annotations && annotations.length === 0 && (
-        <p style={{ color: '#777' }}>No comments yet.</p>
+        <p className="text-muted" style={{ fontSize: 13 }}>No comments yet.</p>
       )}
       {annotations && annotations.length > 0 && (
-        <ul style={{ margin: 0, paddingLeft: 16, marginBottom: 8 }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {annotations.map((a) => (
-            <li key={a.id} style={{ marginBottom: 4 }}>
+            <li key={a.id} style={{ fontSize: 13 }}>
               <strong>{a.author?.name || 'Someone'}</strong>
-              {a.timestampSeconds != null && ` @ ${a.timestampSeconds}s`}: {a.body}
+              {a.timestampSeconds != null && (
+                <span className="text-muted"> @ {a.timestampSeconds}s</span>
+              )}
+              : {a.body}
             </li>
           ))}
         </ul>
       )}
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {parentType === 'take' && (
           <input
+            className="input"
             type="number"
             step="0.1"
             min="0"
             placeholder="sec"
             value={timestampSeconds}
             onChange={(e) => setTimestampSeconds(e.target.value)}
-            style={{ width: 50, padding: 4, marginRight: 4 }}
+            style={{ width: 60 }}
             title="Optional — a specific point in the audio this comment refers to"
           />
         )}
         <input
+          className="input"
           type="text"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Add a comment…"
-          style={{ width: '65%', padding: 4 }}
+          style={{ flex: 1, minWidth: 140 }}
         />
-        <button type="submit" disabled={submitting} style={{ marginLeft: 4 }}>
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
           {submitting ? 'Posting…' : 'Post'}
         </button>
       </form>
-      {error && <p style={{ color: 'crimson', fontSize: 12 }}>{error}</p>}
+      {error && <p style={{ color: 'crimson', fontSize: 12, margin: '6px 0 0' }}>{error}</p>}
     </div>
   );
 }

@@ -23,58 +23,53 @@ export default function DownloadPanel({ songId }) {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} style={{ marginLeft: 6, fontSize: 12 }}>
-        Download
+      <button className="btn btn-secondary" onClick={() => setOpen(true)}>
+        Export
       </button>
     );
   }
 
   return (
-    <div
-      style={{
-        marginTop: 6,
-        fontSize: 13,
-        border: '1px solid #ddd',
-        padding: 8,
-        borderRadius: 6,
-        maxWidth: 320,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <strong>Download</strong>
-        <button onClick={() => setOpen(false)} style={{ fontSize: 12 }}>
+    <div className="card blueprint" style={{ position: 'relative', marginTop: 10, maxWidth: 340 }}>
+      <i className="corner tl" />
+      <i className="corner tr" />
+      <i className="corner bl" />
+      <i className="corner br" />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="card-title">Export</span>
+        <button className="btn btn-ghost" onClick={() => setOpen(false)}>
           Close
         </button>
       </div>
-      <div style={{ marginBottom: 6 }}>
-        <label style={{ marginRight: 12 }}>
+      <div className="seg">
+        <label className="seg-opt">
           <input
             type="radio"
             name={`export-mode-${songId}`}
             checked={mode === 'working'}
             onChange={() => setMode('working')}
-          />{' '}
+          />
           Working pull
         </label>
-        <label>
+        <label className="seg-opt">
           <input
             type="radio"
             name={`export-mode-${songId}`}
             checked={mode === 'handoff'}
             onChange={() => setMode('handoff')}
-          />{' '}
+          />
           External handoff
         </label>
       </div>
-      <p style={{ fontSize: 11, color: '#777', margin: '0 0 8px' }}>
+      <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
         {mode === 'working'
           ? 'Internal-style filenames, no info sheet — for pulling into your own DAW.'
           : 'Clean filenames plus an info sheet — for sharing with someone outside the platform.'}
       </p>
-      <button onClick={handleDownload} disabled={downloading}>
+      <button className="btn btn-primary" onClick={handleDownload} disabled={downloading}>
         {downloading ? 'Preparing…' : 'Download ZIP'}
       </button>
-      {error && <p style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{error}</p>}
+      {error && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{error}</p>}
     </div>
   );
 }
