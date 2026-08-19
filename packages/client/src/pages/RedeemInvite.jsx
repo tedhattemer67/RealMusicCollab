@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { previewInvite, redeemInvite } from '../api';
+import './RedeemInvite.css';
 
 export default function RedeemInvite({ onRedeemed }) {
   const { token } = useParams();
@@ -38,62 +39,96 @@ export default function RedeemInvite({ onRedeemed }) {
   }
 
   if (previewError) {
-    return (
-      <div style={{ maxWidth: 320, margin: '80px auto', fontFamily: 'sans-serif' }}>
-        <p style={{ color: 'crimson' }}>{previewError}</p>
-      </div>
-    );
+    return <div className="invite-error-screen">{previewError}</div>;
   }
   if (!preview) {
-    return (
-      <p style={{ textAlign: 'center', marginTop: 80, fontFamily: 'sans-serif' }}>Loading…</p>
-    );
+    return <div className="invite-loading">Loading…</div>;
   }
 
   return (
-    <div style={{ maxWidth: 320, margin: '80px auto', fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: 20 }}>Join the band</h1>
-      <p style={{ color: '#555', fontSize: 14 }}>
-        You've been invited as a <strong>{preview.role}</strong>
-        {preview.scope === 'project' ? ` on ${preview.projectName}` : ' across the whole band'}.
-      </p>
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
-          <label>Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{ display: 'block', width: '100%', padding: 8, boxSizing: 'border-box' }}
-            required
-          />
+    <div className="invite-screen">
+      <div className="invite-rail">
+        <div>
+          <div className="invite-kicker">Sheet 02 · Invite redemption</div>
+          <div className="invite-headline">
+            Real Music
+            <br />
+            Collab
+          </div>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ display: 'block', width: '100%', padding: 8, boxSizing: 'border-box' }}
-            required
-          />
+        <div className="invite-details">
+          <div className="invite-detail-row">
+            <span>Role</span>
+            <span className="invite-detail-annotation">{preview.role}</span>
+          </div>
+          <div className="invite-detail-row">
+            <span>Access</span>
+            <span className="invite-detail-annotation">
+              {preview.scope === 'project' ? preview.projectName : 'whole band'}
+            </span>
+          </div>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ display: 'block', width: '100%', padding: 8, boxSizing: 'border-box' }}
-            required
-            minLength={8}
-          />
-        </div>
-        {error && <p style={{ color: 'crimson', fontSize: 14 }}>{error}</p>}
-        <button type="submit" disabled={submitting} style={{ padding: '8px 16px' }}>
-          {submitting ? 'Joining…' : 'Join'}
-        </button>
-      </form>
+        <p className="invite-support-copy">
+          You've been invited as a <strong>{preview.role}</strong>
+          {preview.scope === 'project' ? ` on ${preview.projectName}` : ' across the whole band'}.
+          One room per project. Every take keeps its number, every mix remembers which takes it
+          was printed from.
+        </p>
+      </div>
+
+      <div className="invite-form-column">
+        <form className="card blueprint invite-card" onSubmit={handleSubmit}>
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
+          <h3>Join the band</h3>
+          <div className="field invite-field-group">
+            <label>Name</label>
+            <input
+              className="input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>Email</label>
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+            />
+          </div>
+          {error && <p className="invite-error">{error}</p>}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="btn btn-primary btn-block blueprint"
+            style={{ height: 40, position: 'relative' }}
+          >
+            {submitting ? 'Joining…' : 'Join'}
+            <i className="corner tl" />
+            <i className="corner tr" />
+            <i className="corner bl" />
+            <i className="corner br" />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
