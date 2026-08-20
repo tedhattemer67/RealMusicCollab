@@ -24,7 +24,7 @@ export default function Home({ user, onLoggedOut }) {
   return (
     <div className="app-shell">
       <div className="nav app-nav">
-        <span className="nav-brand"><a href="index.html">Real Music Collab</a></span>
+        <span className="nav-brand"><a href="../">Real Music Collab</a></span>
         <NavLink to="/" end>
           Projects
         </NavLink>
