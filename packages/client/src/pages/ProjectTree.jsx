@@ -19,6 +19,7 @@ import TodosPanel from '../components/TodosPanel.jsx';
 import MixPanel from '../components/MixPanel.jsx';
 import DownloadPanel from '../components/DownloadPanel.jsx';
 import MixApprovalControl from '../components/MixApprovalControl.jsx';
+import NotificationChannelsPanel from '../components/NotificationChannelsPanel.jsx';
 import './ProjectTree.css';
 
 const DESKTOP_TABS = [
@@ -268,6 +269,9 @@ export default function ProjectTree({ user }) {
             </button>
           )}
           {archiveError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{archiveError}</p>}
+          {user && user.instanceRole === 'ADMIN' && (
+            <NotificationChannelsPanel projectId={projectId} />
+          )}
         </div>
 
         {project.songs.length === 0 && (

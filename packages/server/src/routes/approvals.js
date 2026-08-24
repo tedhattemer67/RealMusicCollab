@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
 
@@ -36,7 +37,10 @@ router.post(
   async (req, res) => {
     try {
       const { takeId } = req.params;
-      const take = await prisma.take.findUnique({ where: { id: takeId } });
+      const take = await prisma.take.findUnique({
+        where: { id: takeId },
+        include: { track: { select: { name: true, song: { select: { title: true, projectId: true } } } } },
+      });
       if (!take) {
         return res.status(404).json({ error: `No take found with id ${takeId}.` });
       }
@@ -45,13 +49,13 @@ router.post(
         data: { takeId, userId: req.user.id },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          action: 'APPROVAL_GIVEN',
-          actorId: req.user.id,
-          entityType: 'Take',
-          entityId: takeId,
-        },
+      await recordEvent({
+        action: 'APPROVAL_GIVEN',
+        actorId: req.user.id,
+        entityType: 'Take',
+        entityId: takeId,
+        projectId: take.track.song.projectId,
+        message: `${req.user.name} approved Take ${take.takeNumber} for "${take.track.name}" on "${take.track.song.title}".`,
       });
 
       res.status(201).json(approval);
@@ -87,7 +91,10 @@ router.post(
   async (req, res) => {
     try {
       const { mixId } = req.params;
-      const mix = await prisma.mix.findUnique({ where: { id: mixId } });
+      const mix = await prisma.mix.findUnique({
+        where: { id: mixId },
+        include: { song: { select: { title: true, projectId: true } } },
+      });
       if (!mix) {
         return res.status(404).json({ error: `No mix found with id ${mixId}.` });
       }
@@ -96,13 +103,13 @@ router.post(
         data: { mixId, userId: req.user.id },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          action: 'APPROVAL_GIVEN',
-          actorId: req.user.id,
-          entityType: 'Mix',
-          entityId: mixId,
-        },
+      await recordEvent({
+        action: 'APPROVAL_GIVEN',
+        actorId: req.user.id,
+        entityType: 'Mix',
+        entityId: mixId,
+        projectId: mix.song.projectId,
+        message: `${req.user.name} approved Mix v${mix.mixNumber} for "${mix.song.title}".`,
       });
 
       res.status(201).json(approval);

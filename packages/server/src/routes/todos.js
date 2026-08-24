@@ -1,8 +1,28 @@
 const express = require('express');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
+const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
+
+// A Todo is scoped to exactly one of Project/Song/Track — same pattern as
+// createTodo's parentField/parentId args. Only Project and Song carry a
+// projectId directly; a Track needs one more hop through its Song.
+async function resolveProjectIdForTodo({ projectId, songId, trackId }) {
+  if (projectId) return projectId;
+  if (songId) {
+    const song = await prisma.song.findUnique({ where: { id: songId }, select: { projectId: true } });
+    return song ? song.projectId : undefined;
+  }
+  if (trackId) {
+    const track = await prisma.track.findUnique({
+      where: { id: trackId },
+      select: { song: { select: { projectId: true } } },
+    });
+    return track ? track.song.projectId : undefined;
+  }
+  return undefined;
+}
 
 async function createTodo(req, res, parentField, parentId, parentModel) {
   try {
@@ -32,13 +52,16 @@ async function createTodo(req, res, parentField, parentId, parentModel) {
       include: { assignees: { select: { id: true, name: true } } },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        action: 'TODO_CREATED',
-        actorId: req.user.id,
-        entityType: 'Todo',
-        entityId: todo.id,
-      },
+    const projectId = await resolveProjectIdForTodo({ [parentField]: parentId });
+    const parentLabel = parentField === 'songId' ? parent.title : parent.name;
+
+    await recordEvent({
+      action: 'TODO_CREATED',
+      actorId: req.user.id,
+      entityType: 'Todo',
+      entityId: todo.id,
+      projectId,
+      message: `${req.user.name} added a to-do on "${parentLabel}": ${body}`,
     });
 
     res.status(201).json(todo);
@@ -116,13 +139,19 @@ router.patch('/todos/:todoId', requireAuth, async (req, res) => {
     });
 
     if (completed) {
-      await prisma.auditLog.create({
-        data: {
-          action: 'TODO_COMPLETED',
-          actorId: req.user.id,
-          entityType: 'Todo',
-          entityId: todoId,
-        },
+      const projectId = await resolveProjectIdForTodo({
+        projectId: todo.projectId,
+        songId: todo.songId,
+        trackId: todo.trackId,
+      });
+
+      await recordEvent({
+        action: 'TODO_COMPLETED',
+        actorId: req.user.id,
+        entityType: 'Todo',
+        entityId: todoId,
+        projectId,
+        message: `${req.user.name} completed a to-do: ${todo.body}`,
       });
     }
 

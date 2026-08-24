@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { getReadStream } = require('../storage');
+const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
 
@@ -125,14 +126,14 @@ router.post('/songs/:songId/export', requireAuth, async (req, res) => {
       archive.append(manifestLines.join('\n'), { name: 'info-sheet.txt' });
     }
 
-    await prisma.auditLog.create({
-      data: {
-        action: mode === 'handoff' ? 'DOWNLOAD_HANDOFF' : 'DOWNLOAD_WORKING_PULL',
-        actorId: req.user.id,
-        entityType: 'Song',
-        entityId: songId,
-        metadata: { tracksIncluded: selections.length, mixIncluded: willIncludeMix },
-      },
+    await recordEvent({
+      action: mode === 'handoff' ? 'DOWNLOAD_HANDOFF' : 'DOWNLOAD_WORKING_PULL',
+      actorId: req.user.id,
+      entityType: 'Song',
+      entityId: songId,
+      projectId: song.projectId,
+      metadata: { tracksIncluded: selections.length, mixIncluded: willIncludeMix },
+      message: `${req.user.name} downloaded a ${mode === 'handoff' ? 'handoff' : 'working pull'} export of "${song.title}".`,
     });
 
     archive.finalize();
@@ -226,13 +227,13 @@ router.post(
 
       archive.append(manifestLines.join('\n'), { name: 'manifest.txt' });
 
-      await prisma.auditLog.create({
-        data: {
-          action: 'DOWNLOAD_ARCHIVE',
-          actorId: req.user.id,
-          entityType: 'Project',
-          entityId: projectId,
-        },
+      await recordEvent({
+        action: 'DOWNLOAD_ARCHIVE',
+        actorId: req.user.id,
+        entityType: 'Project',
+        entityId: projectId,
+        projectId,
+        message: `${req.user.name} downloaded a full archive of "${project.name}".`,
       });
 
       archive.finalize();

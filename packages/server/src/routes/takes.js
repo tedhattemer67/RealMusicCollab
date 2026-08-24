@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
 
@@ -47,7 +48,7 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
 
     const track = await prisma.track.findUnique({
       where: { id: trackId },
-      include: { song: { select: { id: true, status: true } } },
+      include: { song: { select: { id: true, status: true, title: true, projectId: true } } },
     });
     if (!track) {
       return res.status(404).json({ error: `No track found with id ${trackId}.` });
@@ -69,13 +70,13 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
             reason: 'Automatic — new upload while song was frozen',
           },
         });
-        await prisma.auditLog.create({
-          data: {
-            action: 'UNFREEZE_REQUESTED',
-            actorId: req.user.id,
-            entityType: 'Song',
-            entityId: track.song.id,
-          },
+        await recordEvent({
+          action: 'UNFREEZE_REQUESTED',
+          actorId: req.user.id,
+          entityType: 'Song',
+          entityId: track.song.id,
+          projectId: track.song.projectId,
+          message: `${req.user.name} triggered an automatic unfreeze request for "${track.song.title}" by uploading a take while it was frozen.`,
         });
         unfreezeRequestCreated = true;
       }
@@ -117,13 +118,13 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
       promoted = true;
     }
 
-    await prisma.auditLog.create({
-      data: {
-        action: 'TAKE_UPLOADED',
-        actorId: req.user.id,
-        entityType: 'Take',
-        entityId: take.id,
-      },
+    await recordEvent({
+      action: 'TAKE_UPLOADED',
+      actorId: req.user.id,
+      entityType: 'Take',
+      entityId: take.id,
+      projectId: track.song.projectId,
+      message: `${req.user.name} uploaded Take ${takeNumber} for "${track.name}" on "${track.song.title}".`,
     });
 
     res.status(201).json({

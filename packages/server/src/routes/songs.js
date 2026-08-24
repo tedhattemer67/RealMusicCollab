@@ -5,6 +5,7 @@ const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const { parseBatchFilenames } = require('../lib/filenameParser');
+const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
 
@@ -36,13 +37,13 @@ router.post(
         data: { status: 'FROZEN' },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          action: 'SONG_FROZEN',
-          actorId: req.user.id,
-          entityType: 'Song',
-          entityId: songId,
-        },
+      await recordEvent({
+        action: 'SONG_FROZEN',
+        actorId: req.user.id,
+        entityType: 'Song',
+        entityId: songId,
+        projectId: song.projectId,
+        message: `${req.user.name} froze "${song.title}".`,
       });
 
       res.json(updated);
@@ -79,13 +80,13 @@ router.post('/songs/:songId/unfreeze-requests', requireAuth, async (req, res) =>
       data: { songId, requestedById: req.user.id, reason: req.body.reason || null },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        action: 'UNFREEZE_REQUESTED',
-        actorId: req.user.id,
-        entityType: 'Song',
-        entityId: songId,
-      },
+    await recordEvent({
+      action: 'UNFREEZE_REQUESTED',
+      actorId: req.user.id,
+      entityType: 'Song',
+      entityId: songId,
+      projectId: song.projectId,
+      message: `${req.user.name} requested an unfreeze for "${song.title}".`,
     });
 
     res.status(201).json(request);
@@ -138,6 +139,8 @@ router.post(
         return res.status(409).json({ error: 'This request has already been resolved.' });
       }
 
+      const song = await prisma.song.findUnique({ where: { id: songId } });
+
       const updatedRequest = await prisma.unfreezeRequest.update({
         where: { id: requestId },
         data: {
@@ -154,13 +157,13 @@ router.post(
         });
       }
 
-      await prisma.auditLog.create({
-        data: {
-          action: approve ? 'UNFREEZE_APPROVED' : 'UNFREEZE_DENIED',
-          actorId: req.user.id,
-          entityType: 'Song',
-          entityId: songId,
-        },
+      await recordEvent({
+        action: approve ? 'UNFREEZE_APPROVED' : 'UNFREEZE_DENIED',
+        actorId: req.user.id,
+        entityType: 'Song',
+        entityId: songId,
+        projectId: song.projectId,
+        message: `${req.user.name} ${approve ? 'approved' : 'denied'} the unfreeze request for "${song.title}".`,
       });
 
       res.json(updatedRequest);
@@ -217,13 +220,13 @@ router.post('/songs/:songId/tracks', requireAuth, requireRole(UPLOADER_ROLES, (r
             reason: 'Automatic — new track added while song was frozen',
           },
         });
-        await prisma.auditLog.create({
-          data: {
-            action: 'UNFREEZE_REQUESTED',
-            actorId: req.user.id,
-            entityType: 'Song',
-            entityId: songId,
-          },
+        await recordEvent({
+          action: 'UNFREEZE_REQUESTED',
+          actorId: req.user.id,
+          entityType: 'Song',
+          entityId: songId,
+          projectId: song.projectId,
+          message: `${req.user.name} triggered an automatic unfreeze request for "${song.title}" by adding a new track while it was frozen.`,
         });
         unfreezeRequestCreated = true;
       }
@@ -257,13 +260,13 @@ router.post('/songs/:songId/tracks', requireAuth, requireRole(UPLOADER_ROLES, (r
       data: { currentTakeId: take.id },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        action: 'TAKE_UPLOADED',
-        actorId: req.user.id,
-        entityType: 'Take',
-        entityId: take.id,
-      },
+    await recordEvent({
+      action: 'TAKE_UPLOADED',
+      actorId: req.user.id,
+      entityType: 'Take',
+      entityId: take.id,
+      projectId: song.projectId,
+      message: `${req.user.name} uploaded Take ${take.takeNumber} for "${name}" on "${song.title}".`,
     });
 
     res.status(201).json({
@@ -376,13 +379,13 @@ router.post(
               reason: 'Automatic — batch upload while song was frozen',
             },
           });
-          await prisma.auditLog.create({
-            data: {
-              action: 'UNFREEZE_REQUESTED',
-              actorId: req.user.id,
-              entityType: 'Song',
-              entityId: songId,
-            },
+          await recordEvent({
+            action: 'UNFREEZE_REQUESTED',
+            actorId: req.user.id,
+            entityType: 'Song',
+            entityId: songId,
+            projectId: song.projectId,
+            message: `${req.user.name} triggered an automatic unfreeze request for "${song.title}" via a batch upload while it was frozen.`,
           });
           unfreezeRequestCreated = true;
         }
@@ -402,6 +405,7 @@ router.post(
 
         try {
           let trackId = item.trackId;
+          let trackName = item.name;
 
           if (item.action === 'new-track') {
             if (!item.name) {
@@ -420,6 +424,9 @@ router.post(
             // Lets a name correction from the review screen ride along
             // even when the file itself is landing on an existing track.
             await prisma.track.update({ where: { id: trackId }, data: { name: item.name } });
+          } else {
+            const existingTrack = await prisma.track.findUnique({ where: { id: trackId }, select: { name: true } });
+            trackName = existingTrack ? existingTrack.name : 'Unknown track';
           }
 
           const storageKey = await writeFile(storageConfig, trackId, file.originalname, file.buffer);
@@ -450,13 +457,13 @@ router.post(
             promoted = true;
           }
 
-          await prisma.auditLog.create({
-            data: {
-              action: 'TAKE_UPLOADED',
-              actorId: req.user.id,
-              entityType: 'Take',
-              entityId: take.id,
-            },
+          await recordEvent({
+            action: 'TAKE_UPLOADED',
+            actorId: req.user.id,
+            entityType: 'Take',
+            entityId: take.id,
+            projectId: song.projectId,
+            message: `${req.user.name} uploaded Take ${takeNumber} for "${trackName}" on "${song.title}" (batch upload).`,
           });
 
           results.push({

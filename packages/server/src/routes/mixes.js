@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
+const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
 
@@ -87,13 +88,13 @@ router.post(
         data: { currentMixId: mix.id },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          action: 'MIX_CREATED',
-          actorId: req.user.id,
-          entityType: 'Mix',
-          entityId: mix.id,
-        },
+      await recordEvent({
+        action: 'MIX_CREATED',
+        actorId: req.user.id,
+        entityType: 'Mix',
+        entityId: mix.id,
+        projectId: song.projectId,
+        message: `${req.user.name} created Mix v${mix.mixNumber} for "${song.title}".`,
       });
 
       res.status(201).json(mix);
@@ -136,7 +137,10 @@ router.post(
   async (req, res) => {
     try {
       const { mixId } = req.params;
-      const mix = await prisma.mix.findUnique({ where: { id: mixId } });
+      const mix = await prisma.mix.findUnique({
+        where: { id: mixId },
+        include: { song: { select: { title: true, projectId: true } } },
+      });
       if (!mix) return res.status(404).json({ error: `No mix found with id ${mixId}.` });
       if (mix.status === 'FINAL') {
         return res.status(409).json({ error: 'This mix is already final.' });
@@ -147,13 +151,13 @@ router.post(
         data: { status: 'FINAL' },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          action: 'MIX_FINALIZED',
-          actorId: req.user.id,
-          entityType: 'Mix',
-          entityId: mixId,
-        },
+      await recordEvent({
+        action: 'MIX_FINALIZED',
+        actorId: req.user.id,
+        entityType: 'Mix',
+        entityId: mixId,
+        projectId: mix.song.projectId,
+        message: `${req.user.name} finalized Mix v${mix.mixNumber} for "${mix.song.title}".`,
       });
 
       res.json(updated);

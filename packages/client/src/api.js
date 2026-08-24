@@ -174,6 +174,25 @@ export function updateTodoCompletion(todoId, completed) {
   });
 }
 
+export function getNotificationChannels(projectId) {
+  return request(`/projects/${projectId}/notification-channels`);
+}
+
+export function createNotificationChannel(projectId, data) {
+  return request(`/projects/${projectId}/notification-channels`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteNotificationChannel(channelId) {
+  return request(`/notification-channels/${channelId}`, { method: 'DELETE' });
+}
+
+export function testNotificationChannel(channelId) {
+  return request(`/notification-channels/${channelId}/test`, { method: 'POST' });
+}
+
 export function getUsers() {
   return request('/users');
 }

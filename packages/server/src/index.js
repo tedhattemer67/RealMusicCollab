@@ -23,6 +23,7 @@ const streamRouter = require('./routes/stream');
 const tracksRouter = require('./routes/tracks');
 const usersRouter = require('./routes/users');
 const bootstrapRouter = require('./routes/bootstrap');
+const notificationChannelsRouter = require('./routes/notificationChannels');
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api', streamRouter);
 app.use('/api', tracksRouter);
 app.use('/api', usersRouter);
 app.use('/api', bootstrapRouter);
+app.use('/api', notificationChannelsRouter);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
