@@ -71,6 +71,30 @@ everything's wired correctly, it should land in the real S3 bucket — the
 same thing we just proved works locally, now happening on the actual
 deployed app.
 
+## Optional: Notification channels (Slack/Discord/webhook)
+
+Project activity — uploads, mixes, approvals, freeze/unfreeze, downloads,
+and to-dos — can post automatically to a Slack channel, a Discord channel,
+or any plain JSON webhook. This needs no environment variable and no
+redeploy: it's configured per project, at runtime, from the app itself.
+
+1. Log in as an Admin, open a project, and click **Notifications** in the
+   sidebar (next to Archive project).
+2. Add a channel: pick the type, paste an incoming webhook URL (Slack:
+   workspace settings → Apps → Incoming Webhooks; Discord: channel settings
+   → Integrations → Webhooks), and save.
+3. Use **Send test** to confirm the URL actually works before trusting it.
+
+A project with its own channel(s) uses only those for its events — it
+doesn't also post to an instance-wide default. An instance-wide default
+(a channel with no project attached, currently only addable directly via
+`npx prisma studio`, since there's no UI for it yet) is only used as a
+fallback for projects that haven't configured a channel of their own.
+
+Comments/annotations don't trigger a notification yet — only the actions
+already recorded in `AuditLog` do (uploads, mixes, approvals, freeze/
+unfreeze, downloads, to-dos — see `CLAUDE.md` for the full list).
+
 ## Worth knowing
 
 - **Free-tier Render web services "spin down" after inactivity** and take a
