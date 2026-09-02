@@ -78,6 +78,15 @@ export function approveTake(takeId) {
   return request(`/takes/${takeId}/approvals`, { method: 'POST' });
 }
 
+// Admin only on the server — re-points a track's current default at an
+// existing take (any take, not just the newest).
+export function setCurrentTake(trackId, takeId) {
+  return request(`/tracks/${trackId}/current-take`, {
+    method: 'PUT',
+    body: JSON.stringify({ takeId }),
+  });
+}
+
 export function getMixApprovals(mixId) {
   return request(`/mixes/${mixId}/approvals`);
 }

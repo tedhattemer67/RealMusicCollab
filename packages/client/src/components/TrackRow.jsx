@@ -1,5 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
-import { getTrackTakes, uploadTake, getTakeApprovals, approveTake, getTakeStreamUrl } from '../api';
+import {
+  getTrackTakes,
+  uploadTake,
+  getTakeApprovals,
+  approveTake,
+  getTakeStreamUrl,
+  setCurrentTake,
+} from '../api';
 import Badge from './Badge.jsx';
 import AnnotationsPanel from './AnnotationsPanel.jsx';
 
@@ -21,7 +28,17 @@ export default function TrackRow({ track, onUploaded, user }) {
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState(null);
 
-  useEffect(() => {
+  // The take currently loaded into the shared preview player (id string), or
+  // null when nothing is playing. One player, not one per take, so switching
+  // between takes is a single click and only one thing ever plays at once.
+  const [previewTakeId, setPreviewTakeId] = useState(null);
+
+  // Which take the "Make current" action is mid-flight for, so only that
+  // row's button shows a spinner.
+  const [promotingId, setPromotingId] = useState(null);
+  const [promoteError, setPromoteError] = useState(null);
+
+  function loadApprovals() {
     if (!track.currentTake) {
       setApprovals(null);
       return;
@@ -29,6 +46,10 @@ export default function TrackRow({ track, onUploaded, user }) {
     getTakeApprovals(track.currentTake.id)
       .then(setApprovals)
       .catch(() => setApprovals(null));
+  }
+
+  useEffect(() => {
+    loadApprovals();
   }, [track.currentTake?.id]);
 
   const myApproval =
@@ -42,6 +63,7 @@ export default function TrackRow({ track, onUploaded, user }) {
       await approveTake(track.currentTake.id);
       const fresh = await getTakeApprovals(track.currentTake.id);
       setApprovals(fresh);
+      if (expanded) await loadTakes();
     } catch (err) {
       setApproveError(err.message);
     } finally {
@@ -100,10 +122,52 @@ export default function TrackRow({ track, onUploaded, user }) {
     }
   }
 
-  const [showPreviewPlayer, setShowPreviewPlayer] = useState(false);
-  function handlePreview() {
-    setShowPreviewPlayer((s) => !s);
+  function togglePreview(takeId) {
+    setPreviewTakeId((current) => (current === takeId ? null : takeId));
   }
+
+  async function handleApproveTake(takeId) {
+    setApproving(true);
+    setApproveError(null);
+    try {
+      await approveTake(takeId);
+      await loadTakes();
+      if (takeId === track.currentTake?.id) loadApprovals();
+    } catch (err) {
+      setApproveError(err.message);
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function handleMakeCurrent(takeId) {
+    setPromotingId(takeId);
+    setPromoteError(null);
+    try {
+      const result = await setCurrentTake(track.id, takeId);
+      if (result.unfreezeRequestCreated) {
+        setPromoteError('Song was frozen — an unfreeze request was created.');
+      }
+      await loadTakes();
+      // currentTake lives on the parent's project tree, so it has to refetch
+      // for the "Current" line here (and the mix-building context) to update.
+      if (onUploaded) onUploaded();
+    } catch (err) {
+      setPromoteError(err.message);
+    } finally {
+      setPromotingId(null);
+    }
+  }
+
+  const isAdmin = user && user.instanceRole === 'ADMIN';
+  const canApprove = user && user.instanceRole !== 'VIEWER';
+
+  // Take number shown next to the shared player. Comes from the loaded take
+  // list when we have it, or the current-take summary otherwise.
+  const previewingTake =
+    previewTakeId &&
+    ((takes && takes.find((t) => t.id === previewTakeId)) ||
+      (track.currentTake?.id === previewTakeId ? track.currentTake : null));
 
   return (
     <li className="trackrow" style={{ listStyle: 'none' }}>
@@ -129,7 +193,7 @@ export default function TrackRow({ track, onUploaded, user }) {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button className="btn btn-secondary" onClick={toggleExpand}>
-          {expanded ? 'Hide history' : 'History'}
+          {expanded ? 'Hide takes' : 'Takes'}
         </button>
         <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
           + Take
@@ -139,15 +203,14 @@ export default function TrackRow({ track, onUploaded, user }) {
       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           className="btn btn-ghost"
-          onClick={handlePreview}
+          onClick={() => track.currentTake && togglePreview(track.currentTake.id)}
           disabled={!track.currentTake}
           title="Isolated preview of this track's current take — no mix context"
         >
-          {showPreviewPlayer ? 'Hide preview' : 'Preview'}
+          {previewTakeId && previewTakeId === track.currentTake?.id ? 'Hide preview' : 'Preview'}
         </button>
         {track.currentTake &&
-          user &&
-          user.instanceRole !== 'VIEWER' &&
+          canApprove &&
           (myApproval ? (
             <span className="text-muted" style={{ fontSize: 12 }}>✓ You approved this</span>
           ) : (
@@ -161,26 +224,90 @@ export default function TrackRow({ track, onUploaded, user }) {
       </div>
 
       {approveError && <p style={{ gridColumn: '1 / -1', color: 'crimson', fontSize: 13, margin: 0 }}>{approveError}</p>}
+      {promoteError && <p style={{ gridColumn: '1 / -1', color: 'crimson', fontSize: 13, margin: 0 }}>{promoteError}</p>}
 
-      {showPreviewPlayer && track.currentTake && (
-        <audio
-          controls
-          src={getTakeStreamUrl(track.currentTake.id)}
-          style={{ gridColumn: '1 / -1', width: '100%' }}
-        />
+      {previewTakeId && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          <span className="text-muted" style={{ fontSize: 12 }}>
+            Previewing {previewingTake ? `Take ${previewingTake.takeNumber}` : 'take'}
+          </span>
+          <audio
+            key={previewTakeId}
+            controls
+            autoPlay
+            src={getTakeStreamUrl(previewTakeId)}
+            style={{ width: '100%', marginTop: 4 }}
+          />
+        </div>
       )}
 
       {expanded && (
-        <ul style={{ gridColumn: '1 / -1', margin: 0, padding: 0, listStyle: 'none', fontSize: 13 }}>
-          {loading && <li className="text-muted">Loading…</li>}
-          {takes &&
-            takes.map((t) => (
-              <li key={t.id}>
-                Take {t.takeNumber} — performed by {t.performedBy?.name || 'unknown'}
-                {t.note ? ` — "${t.note}"` : ''}
-              </li>
-            ))}
-        </ul>
+        <div style={{ gridColumn: '1 / -1' }}>
+          {loading && <p className="text-muted" style={{ fontSize: 13 }}>Loading…</p>}
+          {takes && takes.length === 0 && (
+            <p className="text-muted" style={{ fontSize: 13 }}>No takes yet.</p>
+          )}
+          {takes && takes.length > 0 && (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {takes.map((t) => {
+                const isCurrent = t.id === track.currentTake?.id;
+                const iApproved = user && t.approvals?.some((a) => a.userId === user.id);
+                return (
+                  <li
+                    key={t.id}
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 13,
+                      padding: '6px 0',
+                      borderTop: '1px solid var(--color-border, #ddd)',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, minWidth: 56 }}>Take {t.takeNumber}</span>
+                    {isCurrent && <Badge variant="accent">current</Badge>}
+                    {!t.readyForFeedback && <Badge variant="outline">draft</Badge>}
+                    <span className="text-muted">
+                      {t.performedBy?.name || 'unknown'}
+                      {t.note ? ` — “${t.note}”` : ''}
+                    </span>
+                    {t.approvals?.length > 0 && (
+                      <Badge variant="outline">
+                        {t.approvals.length} approval{t.approvals.length === 1 ? '' : 's'}
+                      </Badge>
+                    )}
+                    <span style={{ flex: 1 }} />
+                    <button className="btn btn-ghost" onClick={() => togglePreview(t.id)}>
+                      {previewTakeId === t.id ? 'Hide' : 'Preview'}
+                    </button>
+                    {canApprove &&
+                      (iApproved ? (
+                        <span className="text-muted" style={{ fontSize: 12 }}>✓ approved</span>
+                      ) : (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleApproveTake(t.id)}
+                          disabled={approving}
+                        >
+                          Approve
+                        </button>
+                      ))}
+                    {isAdmin && !isCurrent && (
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleMakeCurrent(t.id)}
+                        disabled={promotingId === t.id}
+                      >
+                        {promotingId === t.id ? 'Setting…' : 'Make current'}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       )}
 
       <form

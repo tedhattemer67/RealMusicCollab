@@ -147,7 +147,13 @@ router.get('/tracks/:trackId/takes', requireAuth, async (req, res) => {
     const takes = await prisma.take.findMany({
       where: { trackId: req.params.trackId },
       orderBy: { takeNumber: 'asc' },
-      include: { performedBy: { select: { id: true, name: true } } },
+      include: {
+        performedBy: { select: { id: true, name: true } },
+        // Approvals are per-take, so the switcher can show sign-off state for
+        // every take at once — not just the current default — without an
+        // extra request per row.
+        approvals: { include: { user: { select: { id: true, name: true } } } },
+      },
     });
     res.json(takes);
   } catch (err) {
