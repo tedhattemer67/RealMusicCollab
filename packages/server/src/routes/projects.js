@@ -2,13 +2,14 @@ const express = require('express');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
 
 const router = express.Router();
 
-// Not Viewer, not Reviewer — only Admin and Contributor can create.
-// (Flagged as a judgment call: creating a brand-new Project could arguably
-// be Admin-only instead, since it's a bigger action than adding to an
-// existing one — defaulting to consistency with everything else for now.)
+// Adding songs to an existing project — Admin or Contributor (not Viewer /
+// Reviewer). Creating a whole new Project is tighter: instance-ADMIN only
+// (see POST /projects), since with per-project isolation the person spinning
+// up a project is also the one deciding who gets into it.
 const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 
 // GET /api/projects — the projects this user can actually see. Instance
@@ -68,7 +69,7 @@ router.get(
 // needs: songs, each song's tracks with their current take (not full take
 // history — that's GET /tracks/:trackId/takes, fetched lazily when a track
 // is expanded), and each song's current mix.
-router.get('/projects/:projectId', requireAuth, async (req, res) => {
+router.get('/projects/:projectId', requireAuth, requireRole(MEMBER_ROLES, (req) => ({ projectId: req.params.projectId }), { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const project = await prisma.project.findUnique({
       where: { id: req.params.projectId },
@@ -104,9 +105,10 @@ router.get('/projects/:projectId', requireAuth, async (req, res) => {
 
 module.exports = router;
 
-// POST /api/projects
+// POST /api/projects — instance-ADMIN only. The empty scope means only an
+// instance admin clears requireRole; a plain instanceRole is no longer a grant.
 // body: { name, caption?, kind? }
-router.post('/projects', requireAuth, requireRole(UPLOADER_ROLES, () => ({})), async (req, res) => {
+router.post('/projects', requireAuth, requireRole(['ADMIN'], () => ({})), async (req, res) => {
   try {
     const { name, caption, kind } = req.body;
     if (!name) {

@@ -8,7 +8,7 @@
     "packages/client"
   ],
   "scripts": {
-    "test": "node --test \"packages/server/test/*.test.js\"",
+    "test": "node --test --test-concurrency=1 \"packages/server/test/*.test.js\"",
     "dev:server": "npm run dev --workspace packages/server",
     "start:server": "npm run start --workspace packages/server",
     "dev:client": "npm run dev --workspace packages/client",

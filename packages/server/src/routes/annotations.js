@@ -1,8 +1,17 @@
 const express = require('express');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
+const { fromSongParam, fromTrackParam, fromTakeParam, fromMixParam } = require('../lib/scope');
 
 const router = express.Router();
+
+// Comments are visible to, and postable by, any member of the project the
+// parent belongs to — Viewers included (their limit is "listen/comment
+// only", and this is the comment part). Reads 404 for non-members so another
+// band's song/take id can't be probed; writes 403.
+const readOpts = { notFoundOnNoAccess: true };
 
 // Shared create/list logic across all four parent types — kept as plain
 // helper functions rather than a route-generating factory, so each actual
@@ -54,34 +63,34 @@ async function listAnnotations(req, res, parentField, parentId) {
 }
 
 // Songs — general comments only (timestampSeconds doesn't apply here)
-router.post('/songs/:songId/annotations', requireAuth, (req, res) =>
+router.post('/songs/:songId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromSongParam), (req, res) =>
   createAnnotation(req, res, 'songId', req.params.songId, prisma.song)
 );
-router.get('/songs/:songId/annotations', requireAuth, (req, res) =>
+router.get('/songs/:songId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromSongParam, readOpts), (req, res) =>
   listAnnotations(req, res, 'songId', req.params.songId)
 );
 
 // Tracks
-router.post('/tracks/:trackId/annotations', requireAuth, (req, res) =>
+router.post('/tracks/:trackId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromTrackParam), (req, res) =>
   createAnnotation(req, res, 'trackId', req.params.trackId, prisma.track)
 );
-router.get('/tracks/:trackId/annotations', requireAuth, (req, res) =>
+router.get('/tracks/:trackId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromTrackParam, readOpts), (req, res) =>
   listAnnotations(req, res, 'trackId', req.params.trackId)
 );
 
 // Takes — the only parent type where timestampSeconds actually applies
-router.post('/takes/:takeId/annotations', requireAuth, (req, res) =>
+router.post('/takes/:takeId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromTakeParam), (req, res) =>
   createAnnotation(req, res, 'takeId', req.params.takeId, prisma.take)
 );
-router.get('/takes/:takeId/annotations', requireAuth, (req, res) =>
+router.get('/takes/:takeId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromTakeParam, readOpts), (req, res) =>
   listAnnotations(req, res, 'takeId', req.params.takeId)
 );
 
 // Mixes
-router.post('/mixes/:mixId/annotations', requireAuth, (req, res) =>
+router.post('/mixes/:mixId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromMixParam), (req, res) =>
   createAnnotation(req, res, 'mixId', req.params.mixId, prisma.mix)
 );
-router.get('/mixes/:mixId/annotations', requireAuth, (req, res) =>
+router.get('/mixes/:mixId/annotations', requireAuth, requireRole(MEMBER_ROLES, fromMixParam, readOpts), (req, res) =>
   listAnnotations(req, res, 'mixId', req.params.mixId)
 );
 

@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
 const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
@@ -70,7 +71,7 @@ router.post(
 );
 
 // GET /api/takes/:takeId/approvals — who's signed off so far
-router.get('/takes/:takeId/approvals', requireAuth, async (req, res) => {
+router.get('/takes/:takeId/approvals', requireAuth, requireRole(MEMBER_ROLES, resolveSongIdForTake, { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const approvals = await prisma.approval.findMany({
       where: { takeId: req.params.takeId },
@@ -124,7 +125,7 @@ router.post(
 );
 
 // GET /api/mixes/:mixId/approvals
-router.get('/mixes/:mixId/approvals', requireAuth, async (req, res) => {
+router.get('/mixes/:mixId/approvals', requireAuth, requireRole(MEMBER_ROLES, resolveSongIdForMix, { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const approvals = await prisma.approval.findMany({
       where: { mixId: req.params.mixId },

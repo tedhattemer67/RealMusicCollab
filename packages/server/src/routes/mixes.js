@@ -3,6 +3,7 @@ const multer = require('multer');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const { recordEvent } = require('../lib/events');
 
@@ -106,7 +107,7 @@ router.post(
 );
 
 // GET /api/songs/:songId/mixes — every version, not just the current one
-router.get('/songs/:songId/mixes', requireAuth, async (req, res) => {
+router.get('/songs/:songId/mixes', requireAuth, requireRole(MEMBER_ROLES, (req) => ({ songId: req.params.songId }), { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const mixes = await prisma.mix.findMany({
       where: { songId: req.params.songId },

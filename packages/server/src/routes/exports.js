@@ -3,6 +3,7 @@ const archiver = require('archiver');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
 const { getReadStream } = require('../storage');
 const { recordEvent } = require('../lib/events');
 
@@ -16,8 +17,9 @@ const router = express.Router();
 //     track's current default)
 //   includeMix: true|false  (optional, defaults to true if a current mix exists)
 // }
-// All roles, including Viewer, can hit this — matches how we designed export.
-router.post('/songs/:songId/export', requireAuth, async (req, res) => {
+// All roles, including Viewer, can hit this — matches how we designed export —
+// but only members of the song's project.
+router.post('/songs/:songId/export', requireAuth, requireRole(MEMBER_ROLES, (req) => ({ songId: req.params.songId }), { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const { songId } = req.params;
     const { mode, tracks, includeMix } = req.body;

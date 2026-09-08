@@ -1,9 +1,17 @@
 const express = require('express');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
+const { fromProjectParam, fromSongParam, fromTrackParam, fromTodoParam } = require('../lib/scope');
 const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
+
+// To-dos are task tracking, not comments — a Viewer (read + comment only)
+// can see them but not create or check them off. Everyone else can.
+const TODO_WRITER_ROLES = ['ADMIN', 'CONTRIBUTOR', 'REVIEWER'];
+const readOpts = { notFoundOnNoAccess: true };
 
 // A Todo is scoped to exactly one of Project/Song/Track — same pattern as
 // createTodo's parentField/parentId args. Only Project and Song carry a
@@ -90,33 +98,33 @@ async function listTodos(req, res, parentField, parentId) {
 }
 
 // Projects
-router.post('/projects/:projectId/todos', requireAuth, (req, res) =>
+router.post('/projects/:projectId/todos', requireAuth, requireRole(TODO_WRITER_ROLES, fromProjectParam), (req, res) =>
   createTodo(req, res, 'projectId', req.params.projectId, prisma.project)
 );
-router.get('/projects/:projectId/todos', requireAuth, (req, res) =>
+router.get('/projects/:projectId/todos', requireAuth, requireRole(MEMBER_ROLES, fromProjectParam, readOpts), (req, res) =>
   listTodos(req, res, 'projectId', req.params.projectId)
 );
 
 // Songs
-router.post('/songs/:songId/todos', requireAuth, (req, res) =>
+router.post('/songs/:songId/todos', requireAuth, requireRole(TODO_WRITER_ROLES, fromSongParam), (req, res) =>
   createTodo(req, res, 'songId', req.params.songId, prisma.song)
 );
-router.get('/songs/:songId/todos', requireAuth, (req, res) =>
+router.get('/songs/:songId/todos', requireAuth, requireRole(MEMBER_ROLES, fromSongParam, readOpts), (req, res) =>
   listTodos(req, res, 'songId', req.params.songId)
 );
 
 // Tracks
-router.post('/tracks/:trackId/todos', requireAuth, (req, res) =>
+router.post('/tracks/:trackId/todos', requireAuth, requireRole(TODO_WRITER_ROLES, fromTrackParam), (req, res) =>
   createTodo(req, res, 'trackId', req.params.trackId, prisma.track)
 );
-router.get('/tracks/:trackId/todos', requireAuth, (req, res) =>
+router.get('/tracks/:trackId/todos', requireAuth, requireRole(MEMBER_ROLES, fromTrackParam, readOpts), (req, res) =>
   listTodos(req, res, 'trackId', req.params.trackId)
 );
 
 // PATCH /api/todos/:todoId  body: { completed: true|false }
 // Matches the "instant save checkbox" behavior from the UI mockups — no
 // separate batch-submit step.
-router.patch('/todos/:todoId', requireAuth, async (req, res) => {
+router.patch('/todos/:todoId', requireAuth, requireRole(TODO_WRITER_ROLES, fromTodoParam), async (req, res) => {
   try {
     const { todoId } = req.params;
     const { completed } = req.body;

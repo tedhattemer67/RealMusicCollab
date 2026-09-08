@@ -33,6 +33,9 @@ async function startServer() {
 async function stopServer() {
   if (server) await new Promise((r) => server.close(r));
   server = null;
+  // recordEvent fires notifyChannels() without awaiting it; give any in-flight
+  // one a moment to finish so it doesn't hit a disconnected client and log noise.
+  await new Promise((r) => setTimeout(r, 150));
   await prisma.$disconnect();
 }
 
@@ -84,6 +87,32 @@ async function createSong(project, { title } = {}) {
   });
 }
 
+async function createStorageConfig() {
+  return prisma.storageConfig.create({
+    data: { type: 'LOCAL', label: 'test', isDefault: true, settings: { rootPath: '/tmp/test' } },
+  });
+}
+
+// Song already created by the caller; returns { track, take } with the take
+// wired up as the track's current default.
+async function createTrackWithTake(song, uploader, storageConfig) {
+  const track = await prisma.track.create({
+    data: { songId: song.id, name: uniq('track') },
+  });
+  const take = await prisma.take.create({
+    data: {
+      trackId: track.id,
+      takeNumber: 1,
+      storageConfigId: storageConfig.id,
+      storageKey: `${track.id}/take1.wav`,
+      performedById: uploader.id,
+      uploadedById: uploader.id,
+    },
+  });
+  await prisma.track.update({ where: { id: track.id }, data: { currentTakeId: take.id } });
+  return { track, take };
+}
+
 // Thin fetch wrapper: pass a cookie string to authenticate, a plain object
 // body to send JSON. Returns { status, body }.
 async function api(method, path, { cookie, body } = {}) {
@@ -115,5 +144,7 @@ module.exports = {
   createProject,
   addMember,
   createSong,
+  createStorageConfig,
+  createTrackWithTake,
   api,
 };

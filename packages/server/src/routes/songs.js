@@ -6,8 +6,14 @@ const requireRole = require('../middleware/requireRole');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const { parseBatchFilenames } = require('../lib/filenameParser');
 const { recordEvent } = require('../lib/events');
+const { MEMBER_ROLES } = require('../lib/roles');
 
 const router = express.Router();
+
+// Any member of the project can view a song and ask for an unfreeze — the
+// Viewer "listen/comment only" limit still lets them request a reopen; only
+// freezing and resolving the request are Admin-gated.
+const scopeSong = (req) => ({ songId: req.params.songId });
 
 // Memory storage, not disk storage like the regular take-upload route —
 // the Track doesn't exist yet when the file arrives, so there's no id to
@@ -57,7 +63,7 @@ router.post(
 // POST /api/songs/:songId/unfreeze-requests
 // Any logged-in role can ask — Admin resolves it separately below.
 // body: { reason? }
-router.post('/songs/:songId/unfreeze-requests', requireAuth, async (req, res) => {
+router.post('/songs/:songId/unfreeze-requests', requireAuth, requireRole(MEMBER_ROLES, scopeSong), async (req, res) => {
   try {
     const { songId } = req.params;
     const song = await prisma.song.findUnique({ where: { id: songId } });
@@ -97,7 +103,7 @@ router.post('/songs/:songId/unfreeze-requests', requireAuth, async (req, res) =>
 });
 
 // GET /api/songs/:songId/unfreeze-requests
-router.get('/songs/:songId/unfreeze-requests', requireAuth, async (req, res) => {
+router.get('/songs/:songId/unfreeze-requests', requireAuth, requireRole(MEMBER_ROLES, scopeSong, { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const requests = await prisma.unfreezeRequest.findMany({
       where: { songId: req.params.songId },

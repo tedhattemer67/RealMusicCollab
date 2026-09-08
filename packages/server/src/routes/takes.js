@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
 const { recordEvent } = require('../lib/events');
 
 const router = express.Router();
@@ -107,10 +108,11 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
 
     // The role-dependent promotion rule we designed: an Admin's own upload
     // auto-promotes to the track's current default; anyone else's lands as
-    // a new take, pending an Admin's promotion later. req.user came straight
-    // from the verified session, so this is a real check now, not a guess.
+    // a new take, pending an Admin's promotion later. Uses the effective role
+    // for THIS song (set by requireRole), so a project Admin counts and a
+    // mere instance-wide role does not leak in.
     let promoted = false;
-    if (req.user.instanceRole === 'ADMIN') {
+    if (req.effectiveRole === 'ADMIN') {
       await prisma.track.update({
         where: { id: trackId },
         data: { currentTakeId: take.id },
@@ -142,7 +144,7 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
 // GET /api/tracks/:trackId/takes — full take history for a track, for the
 // "expand to see previous takes" view. POST above only ever created one;
 // nothing previously listed them back.
-router.get('/tracks/:trackId/takes', requireAuth, async (req, res) => {
+router.get('/tracks/:trackId/takes', requireAuth, requireRole(MEMBER_ROLES, resolveSongIdForTrack, { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const takes = await prisma.take.findMany({
       where: { trackId: req.params.trackId },

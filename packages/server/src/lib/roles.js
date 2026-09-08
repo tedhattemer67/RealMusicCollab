@@ -60,4 +60,9 @@ async function hasProjectAccess(userId, { projectId, songId } = {}) {
   return role !== null;
 }
 
-module.exports = { getEffectiveRole, hasProjectAccess };
+// Every role — i.e. "any member of the project." Read routes and comment/
+// unfreeze-request routes (which Viewers are explicitly allowed to use) pass
+// this to requireRole.
+const MEMBER_ROLES = ['ADMIN', 'CONTRIBUTOR', 'REVIEWER', 'VIEWER'];
+
+module.exports = { getEffectiveRole, hasProjectAccess, MEMBER_ROLES };

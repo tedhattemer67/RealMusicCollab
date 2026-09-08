@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
+const { MEMBER_ROLES } = require('../lib/roles');
+const { fromTakeParam, fromMixParam } = require('../lib/scope');
 const { LOCAL_ROOT, getRedirectUrl } = require('../storage');
 
 const router = express.Router();
@@ -61,7 +64,7 @@ async function streamOrRedirect(req, res, storageConfig, storageKey) {
 }
 
 // GET /api/takes/:takeId/stream
-router.get('/takes/:takeId/stream', requireAuth, async (req, res) => {
+router.get('/takes/:takeId/stream', requireAuth, requireRole(MEMBER_ROLES, fromTakeParam, { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const take = await prisma.take.findUnique({
       where: { id: req.params.takeId },
@@ -80,7 +83,7 @@ router.get('/takes/:takeId/stream', requireAuth, async (req, res) => {
 });
 
 // GET /api/mixes/:mixId/stream
-router.get('/mixes/:mixId/stream', requireAuth, async (req, res) => {
+router.get('/mixes/:mixId/stream', requireAuth, requireRole(MEMBER_ROLES, fromMixParam, { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const mix = await prisma.mix.findUnique({
       where: { id: req.params.mixId },
