@@ -10,7 +10,7 @@ import {
 import Badge from './Badge.jsx';
 import AnnotationsPanel from './AnnotationsPanel.jsx';
 
-export default function TrackRow({ track, onUploaded, user }) {
+export default function TrackRow({ track, onUploaded, user, myRole }) {
   const [expanded, setExpanded] = useState(false);
   const [takes, setTakes] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -159,8 +159,12 @@ export default function TrackRow({ track, onUploaded, user }) {
     }
   }
 
-  const isAdmin = user && user.instanceRole === 'ADMIN';
-  const canApprove = user && user.instanceRole !== 'VIEWER';
+  // Effective role for THIS project (from GET /projects/:id -> myRole), with a
+  // fall back to the instance role for any caller rendered without it.
+  const role = myRole || (user && user.instanceRole);
+  const isAdmin = role === 'ADMIN';
+  const canApprove = role && role !== 'VIEWER';
+  const canUpload = role === 'ADMIN' || role === 'CONTRIBUTOR';
 
   // Take number shown next to the shared player. Comes from the loaded take
   // list when we have it, or the current-take summary otherwise.
@@ -195,9 +199,11 @@ export default function TrackRow({ track, onUploaded, user }) {
         <button className="btn btn-secondary" onClick={toggleExpand}>
           {expanded ? 'Hide takes' : 'Takes'}
         </button>
-        <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
-          + Take
-        </button>
+        {canUpload && (
+          <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
+            + Take
+          </button>
+        )}
       </div>
 
       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -310,23 +316,25 @@ export default function TrackRow({ track, onUploaded, user }) {
         </div>
       )}
 
-      <form
-        onSubmit={handleUpload}
-        style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}
-      >
-        <input type="file" ref={fileInputRef} accept=".wav,audio/wav" />
-        <input
-          className="input"
-          type="text"
-          placeholder="Note (optional)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          style={{ flex: 1, minWidth: 140 }}
-        />
-        <button type="submit" className="btn btn-secondary" disabled={uploading}>
-          {uploading ? 'Uploading…' : 'Upload take'}
-        </button>
-      </form>
+      {canUpload && (
+        <form
+          onSubmit={handleUpload}
+          style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}
+        >
+          <input type="file" ref={fileInputRef} accept=".wav,audio/wav" />
+          <input
+            className="input"
+            type="text"
+            placeholder="Note (optional)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            style={{ flex: 1, minWidth: 140 }}
+          />
+          <button type="submit" className="btn btn-secondary" disabled={uploading}>
+            {uploading ? 'Uploading…' : 'Upload take'}
+          </button>
+        </form>
+      )}
       {uploadError && <p style={{ gridColumn: '1 / -1', color: 'crimson', fontSize: 13, margin: 0 }}>{uploadError}</p>}
       {uploadResult && (
         <p style={{ gridColumn: '1 / -1', color: 'var(--color-accent-700)', fontSize: 13, margin: 0 }}>

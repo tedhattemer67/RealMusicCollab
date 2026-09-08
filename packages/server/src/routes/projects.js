@@ -96,7 +96,9 @@ router.get('/projects/:projectId', requireAuth, requireRole(MEMBER_ROLES, (req) 
         .json({ error: `No project found with id ${req.params.projectId}.` });
     }
 
-    res.json(project);
+    // The caller's effective role for this project, so the client can show
+    // only the affordances they can actually use. Set by requireRole above.
+    res.json({ ...project, myRole: req.effectiveRole });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong fetching the project.' });

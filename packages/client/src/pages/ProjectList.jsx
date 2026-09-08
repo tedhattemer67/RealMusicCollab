@@ -4,7 +4,8 @@ import { getProjects } from '../api';
 import AddProjectForm from '../components/AddProjectForm.jsx';
 import './ProjectList.css';
 
-export default function ProjectList() {
+export default function ProjectList({ user }) {
+  const isAdmin = user && user.instanceRole === 'ADMIN';
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState(null);
 
@@ -24,7 +25,13 @@ export default function ProjectList() {
   return (
     <div className="project-list-page">
       <h2>Projects</h2>
-      {projects.length === 0 && <p className="text-muted">No projects yet.</p>}
+      {projects.length === 0 && (
+        <p className="text-muted">
+          {isAdmin
+            ? 'No projects yet — create one below.'
+            : "You're not on any projects yet. An admin needs to add you to one."}
+        </p>
+      )}
       <ul className="project-list">
         {projects.map((p) => (
           <li key={p.id} className="card blueprint project-list-item" style={{ position: 'relative' }}>
@@ -37,7 +44,7 @@ export default function ProjectList() {
           </li>
         ))}
       </ul>
-      <AddProjectForm onCreated={load} />
+      {isAdmin && <AddProjectForm onCreated={load} />}
     </div>
   );
 }

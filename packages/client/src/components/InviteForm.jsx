@@ -1,21 +1,37 @@
-import { useState } from 'react';
-import { createInvite } from '../api';
+import { useState, useEffect } from 'react';
+import { createInvite, getProjects } from '../api';
 
 const ROLES = ['ADMIN', 'CONTRIBUTOR', 'REVIEWER', 'VIEWER'];
 
+// Instance-ADMIN only (rendered from Members for admins). An invite either
+// puts someone straight onto a project at a chosen role, or — with no
+// project — creates another instance administrator.
 export default function InviteForm() {
   const [open, setOpen] = useState(false);
+  const [projects, setProjects] = useState([]);
+  const [projectId, setProjectId] = useState('');
   const [role, setRole] = useState('CONTRIBUTOR');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [invite, setInvite] = useState(null);
+
+  useEffect(() => {
+    if (open) {
+      getProjects()
+        .then(setProjects)
+        .catch(() => {});
+    }
+  }, [open]);
+
+  const instanceAdminInvite = projectId === '';
 
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createInvite({ role });
+      const body = instanceAdminInvite ? { role: 'ADMIN' } : { role, projectId };
+      const result = await createInvite(body);
       setInvite(result);
     } catch (err) {
       setError(err.message);
@@ -26,6 +42,8 @@ export default function InviteForm() {
 
   function closeAndReset() {
     setInvite(null);
+    setProjectId('');
+    setRole('CONTRIBUTOR');
     setOpen(false);
   }
 
@@ -48,15 +66,29 @@ export default function InviteForm() {
       {!invite ? (
         <form onSubmit={handleSubmit}>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>Role this invite grants</label>
-            <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
+            <label>Project</label>
+            <select className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+              <option value="">— Instance administrator (no project) —</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
+          {!instanceAdminInvite && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label>Role on this project</label>
+              <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {instanceAdminInvite && (
+            <p className="text-muted" style={{ fontSize: 13, margin: '0 0 10px' }}>
+              This link creates a full instance administrator — access to every project.
+            </p>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
               {submitting ? 'Generating…' : 'Generate invite link'}
@@ -70,7 +102,8 @@ export default function InviteForm() {
       ) : (
         <div>
           <p style={{ margin: '0 0 8px', fontSize: 13 }}>
-            Share this link — it's single-use, and grants <strong>{invite.role}</strong>:
+            Share this link — it's single-use, and grants <strong>{invite.role}</strong>
+            {invite.projectId ? ' on that project' : ' instance-wide'}:
           </p>
           <input
             className="input"

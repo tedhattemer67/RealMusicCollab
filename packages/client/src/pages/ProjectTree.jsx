@@ -20,6 +20,7 @@ import MixPanel from '../components/MixPanel.jsx';
 import DownloadPanel from '../components/DownloadPanel.jsx';
 import MixApprovalControl from '../components/MixApprovalControl.jsx';
 import NotificationChannelsPanel from '../components/NotificationChannelsPanel.jsx';
+import ProjectMembersPanel from '../components/ProjectMembersPanel.jsx';
 import './ProjectTree.css';
 
 const DESKTOP_TABS = [
@@ -270,8 +271,20 @@ export default function ProjectTree({ user }) {
     setActiveTab('tracks');
   }
 
-  if (error) return <p style={{ color: 'crimson' }}>{error}</p>;
+  if (error) {
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ color: 'crimson' }}>
+          This project isn’t available to you{error && error !== 'Not found.' ? ` — ${error}` : '.'}
+        </p>
+        <p><Link to="/">&larr; Back to your projects</Link></p>
+      </div>
+    );
+  }
   if (!project) return <p className="text-muted">Loading…</p>;
+
+  // The caller's effective role for this project (GET /projects/:id -> myRole).
+  const canUpload = project.myRole === 'ADMIN' || project.myRole === 'CONTRIBUTOR';
 
   const selectedSong = project.songs.find((s) => s.id === selectedSongId) || null;
 
@@ -295,6 +308,9 @@ export default function ProjectTree({ user }) {
             </button>
           )}
           {archiveError && <p style={{ color: 'crimson', fontSize: 12, margin: 0 }}>{archiveError}</p>}
+          {user && user.instanceRole === 'ADMIN' && (
+            <ProjectMembersPanel projectId={projectId} />
+          )}
           {user && user.instanceRole === 'ADMIN' && (
             <NotificationChannelsPanel projectId={projectId} />
           )}
@@ -339,21 +355,25 @@ export default function ProjectTree({ user }) {
                       </span>
                     </button>
                   ))}
-                  <div style={{ padding: '4px 16px 0' }}>
-                    <AddTrackForm songId={song.id} onCreated={load} />
-                  </div>
+                  {canUpload && (
+                    <div style={{ padding: '4px 16px 0' }}>
+                      <AddTrackForm songId={song.id} onCreated={load} />
+                    </div>
+                  )}
                 </>
               )}
             </div>
           );
         })}
 
-        <div style={{ padding: '4px 16px 0' }}>
-          <AddSongForm projectId={projectId} onCreated={load} />
-        </div>
+        {canUpload && (
+          <div style={{ padding: '4px 16px 0' }}>
+            <AddSongForm projectId={projectId} onCreated={load} />
+          </div>
+        )}
 
         <div className="sidebar-footer">
-          <TodosPanel parentType="project" parentId={projectId} label="Project to-dos" />
+          <TodosPanel parentType="project" parentId={projectId} projectId={projectId} label="Project to-dos" />
         </div>
       </div>
 
@@ -367,7 +387,9 @@ export default function ProjectTree({ user }) {
               </div>
               <div className="main-col-actions">
                 <SongStatusBadge status={selectedSong.status} />
-                <BatchUploadForm songId={selectedSong.id} tracks={selectedSong.tracks} onUploaded={load} />
+                {canUpload && (
+                  <BatchUploadForm songId={selectedSong.id} projectId={projectId} tracks={selectedSong.tracks} onUploaded={load} />
+                )}
                 <DownloadPanel songId={selectedSong.id} />
                 <FreezeControl song={selectedSong} user={user} onChange={load} />
               </div>
@@ -397,13 +419,15 @@ export default function ProjectTree({ user }) {
                   )}
                   <ul style={{ margin: 0, padding: 0 }}>
                     {selectedSong.tracks.map((track) => (
-                      <TrackRow key={track.id} track={track} onUploaded={load} user={user} />
+                      <TrackRow key={track.id} track={track} onUploaded={load} user={user} myRole={project.myRole} />
                     ))}
                   </ul>
                 </div>
-                <div style={{ marginTop: 10 }}>
-                  <AddTrackForm songId={selectedSong.id} onCreated={load} />
-                </div>
+                {canUpload && (
+                  <div style={{ marginTop: 10 }}>
+                    <AddTrackForm songId={selectedSong.id} onCreated={load} />
+                  </div>
+                )}
                 <MixApprovalSummary song={selectedSong} user={user} />
               </>
             )}
@@ -413,7 +437,7 @@ export default function ProjectTree({ user }) {
             )}
 
             {activeTab === 'todos' && (
-              <TodosPanel parentType="song" parentId={selectedSong.id} label="Song to-dos" embedded />
+              <TodosPanel parentType="song" parentId={selectedSong.id} projectId={projectId} label="Song to-dos" embedded />
             )}
 
             {activeTab === 'activity' && (
@@ -435,7 +459,7 @@ export default function ProjectTree({ user }) {
             <div>
               <div className="mono rail-section-label">To-dos</div>
               <div className="rail-panel">
-                <TodosPanel parentType="song" parentId={selectedSong.id} label="Song to-dos" embedded />
+                <TodosPanel parentType="song" parentId={selectedSong.id} projectId={projectId} label="Song to-dos" embedded />
               </div>
             </div>
             <div>

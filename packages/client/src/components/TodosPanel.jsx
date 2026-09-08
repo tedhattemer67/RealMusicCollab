@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getTodos, createTodo, updateTodoCompletion, getUsers } from '../api';
 
-export default function TodosPanel({ parentType, parentId, label = 'To-dos', embedded = false }) {
+export default function TodosPanel({ parentType, parentId, projectId, label = 'To-dos', embedded = false }) {
   const [open, setOpen] = useState(embedded);
   const [todos, setTodos] = useState(null);
   const [users, setUsers] = useState([]);
@@ -24,11 +24,14 @@ export default function TodosPanel({ parentType, parentId, label = 'To-dos', emb
   useEffect(() => {
     if (open) {
       load();
-      getUsers()
+      // projectId scopes the assignee list to this project's members; the
+      // project-scoped panel passes its own id as parentId, so fall back to
+      // that when projectId isn't given explicitly.
+      getUsers(projectId || (parentType === 'project' ? parentId : undefined))
         .then(setUsers)
         .catch(() => {});
     }
-  }, [open, load]);
+  }, [open, load, projectId, parentType, parentId]);
 
   function toggleAssignee(id) {
     setAssigneeIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));

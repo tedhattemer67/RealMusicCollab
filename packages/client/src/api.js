@@ -202,8 +202,34 @@ export function testNotificationChannel(channelId) {
   return request(`/notification-channels/${channelId}/test`, { method: 'POST' });
 }
 
-export function getUsers() {
-  return request('/users');
+// No argument -> every active user (instance ADMIN only), for the "add
+// someone to a project" picker. With a projectId -> just that project's
+// members (id + name), for performer / assignee pickers, readable by any
+// member of the project.
+export function getUsers(projectId) {
+  return request(projectId ? `/users?projectId=${encodeURIComponent(projectId)}` : '/users');
+}
+
+export function getProjectMembers(projectId) {
+  return request(`/projects/${projectId}/members`);
+}
+
+export function addProjectMember(projectId, userId, role) {
+  return request(`/projects/${projectId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, role }),
+  });
+}
+
+export function updateProjectMember(projectId, userId, role) {
+  return request(`/projects/${projectId}/members/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function removeProjectMember(projectId, userId) {
+  return request(`/projects/${projectId}/members/${userId}`, { method: 'DELETE' });
 }
 
 export function changePassword(currentPassword, newPassword) {

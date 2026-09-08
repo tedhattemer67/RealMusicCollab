@@ -84,6 +84,8 @@ test('member CAN read the project tree; non-member cannot', async () => {
   });
   assert.equal(memberRes.status, 200);
   assert.equal(memberRes.body.id, f.project.id);
+  // The frontend gates write affordances on this.
+  assert.equal(memberRes.body.myRole, 'CONTRIBUTOR');
 
   const outsiderRes = await h.api('GET', `/api/projects/${f.project.id}`, {
     cookie: f.outsiderCookie,
@@ -117,6 +119,7 @@ test('instance ADMIN who is not a member still reads and writes freely', async (
 
   const read = await h.api('GET', `/api/projects/${f.project.id}`, { cookie });
   assert.equal(read.status, 200);
+  assert.equal(read.body.myRole, 'ADMIN');
 
   const todo = await h.api('POST', `/api/songs/${f.song.id}/todos`, {
     cookie,

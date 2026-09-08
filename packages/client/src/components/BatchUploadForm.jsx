@@ -5,7 +5,7 @@ import { batchPreview, batchUpload, getUsers } from '../api';
 // the parser suggests (fully editable — nothing saved yet), and only then
 // actually uploading. batch-preview is called with filenames only; the
 // real files never leave the browser until the review is confirmed.
-export default function BatchUploadForm({ songId, tracks, onUploaded }) {
+export default function BatchUploadForm({ songId, projectId, tracks, onUploaded }) {
   const [step, setStep] = useState('idle'); // idle | picking | review | done
   const fileInputRef = useRef(null);
   const [files, setFiles] = useState([]);
@@ -17,11 +17,11 @@ export default function BatchUploadForm({ songId, tracks, onUploaded }) {
 
   useEffect(() => {
     if (step === 'picking' || step === 'review') {
-      getUsers()
+      getUsers(projectId)
         .then(setUsers)
         .catch(() => {});
     }
-  }, [step]);
+  }, [step, projectId]);
 
   function handleFilesChosen(e) {
     setFiles(Array.from(e.target.files));

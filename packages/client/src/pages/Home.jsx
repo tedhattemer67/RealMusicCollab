@@ -98,7 +98,7 @@ export default function Home({ user, onLoggedOut }) {
       </div>
       <div className="app-content">
         <Routes>
-          <Route path="/" element={<ProjectList />} />
+          <Route path="/" element={<ProjectList user={user} />} />
           <Route path="/projects/:projectId" element={<ProjectTree user={user} />} />
           <Route path="/members" element={<Members user={user} />} />
           <Route path="/manage-projects" element={<ManageProjects user={user} />} />
