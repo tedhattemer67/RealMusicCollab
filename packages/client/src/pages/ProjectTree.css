@@ -29,22 +29,57 @@
   font-size: 20px;
   text-transform: uppercase;
 }
+.tree-song-row {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+}
+.tree-song-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  padding: 14px 4px 4px 12px;
+  line-height: 1;
+}
+.tree-song-toggle:hover {
+  color: var(--color-accent-700);
+}
+.tree-chevron {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.12s ease;
+}
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
 .tree-song {
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  padding: 14px 16px 4px;
+  padding: 14px 16px 4px 4px;
   cursor: pointer;
   background: none;
   border: none;
   text-align: left;
   color: inherit;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 .tree-song:hover {
   color: var(--color-accent-700);
+}
+.tree-song-row.selected .tree-song {
+  color: var(--color-accent-700);
+}
+.tree-song-count {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--color-text) 40%, transparent);
 }
 .tree-row {
   display: flex;

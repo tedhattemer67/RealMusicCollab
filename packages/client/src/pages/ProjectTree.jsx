@@ -195,6 +195,11 @@ export default function ProjectTree({ user }) {
   const [selectedSongId, setSelectedSongId] = useState(null);
   const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [activeTab, setActiveTab] = useState('tracks');
+  // Sidebar songs start collapsed — with a dozen-plus songs, rendering every
+  // song's full track list at once made the tree unusable. The song you're
+  // actively viewing is auto-expanded (see selectSong / the default-select
+  // effect); the chevron toggles any song independently of selection.
+  const [expandedSongIds, setExpandedSongIds] = useState(() => new Set());
 
   async function handleArchive() {
     setArchiving(true);
@@ -227,15 +232,36 @@ export default function ProjectTree({ user }) {
   useEffect(() => {
     if (!project) return;
     if (!project.songs.find((s) => s.id === selectedSongId)) {
-      setSelectedSongId(project.songs[0]?.id ?? null);
+      const nextId = project.songs[0]?.id ?? null;
+      setSelectedSongId(nextId);
       setSelectedTrackId(null);
+      if (nextId) expandSong(nextId);
     }
   }, [project, selectedSongId]);
+
+  function expandSong(songId) {
+    setExpandedSongIds((prev) => {
+      if (prev.has(songId)) return prev;
+      const next = new Set(prev);
+      next.add(songId);
+      return next;
+    });
+  }
+
+  function toggleSongExpanded(songId) {
+    setExpandedSongIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(songId)) next.delete(songId);
+      else next.add(songId);
+      return next;
+    });
+  }
 
   function selectSong(songId) {
     setSelectedSongId(songId);
     setSelectedTrackId(null);
     setActiveTab('tracks');
+    expandSong(songId);
   }
 
   function selectTrack(songId, trackId) {
@@ -278,28 +304,49 @@ export default function ProjectTree({ user }) {
           <p className="text-muted" style={{ padding: '0 16px', fontSize: 13 }}>No songs yet.</p>
         )}
 
-        {project.songs.map((song) => (
-          <div key={song.id}>
-            <button className="tree-song" onClick={() => selectSong(song.id)}>
-              {song.title}
-            </button>
-            {song.tracks.map((track) => (
-              <button
-                key={track.id}
-                className={`tree-row${selectedTrackId === track.id ? ' active' : ''}`}
-                onClick={() => selectTrack(song.id, track.id)}
-              >
-                {track.name}
-                <span className="mono tree-take">
-                  {track.currentTake ? `take ${track.currentTake.takeNumber}` : 'no take'}
-                </span>
-              </button>
-            ))}
-            <div style={{ padding: '4px 16px 0' }}>
-              <AddTrackForm songId={song.id} onCreated={load} />
+        {project.songs.map((song) => {
+          const expanded = expandedSongIds.has(song.id);
+          return (
+            <div key={song.id}>
+              <div className={`tree-song-row${selectedSongId === song.id ? ' selected' : ''}`}>
+                <button
+                  type="button"
+                  className="tree-song-toggle"
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? 'Collapse' : 'Expand'} ${song.title} tracks`}
+                  onClick={() => toggleSongExpanded(song.id)}
+                >
+                  <span className={`tree-chevron${expanded ? ' open' : ''}`} aria-hidden="true">
+                    ▸
+                  </span>
+                </button>
+                <button type="button" className="tree-song" onClick={() => selectSong(song.id)}>
+                  {song.title}
+                  <span className="mono tree-song-count">{song.tracks.length}</span>
+                </button>
+              </div>
+              {expanded && (
+                <>
+                  {song.tracks.map((track) => (
+                    <button
+                      key={track.id}
+                      className={`tree-row${selectedTrackId === track.id ? ' active' : ''}`}
+                      onClick={() => selectTrack(song.id, track.id)}
+                    >
+                      {track.name}
+                      <span className="mono tree-take">
+                        {track.currentTake ? `take ${track.currentTake.takeNumber}` : 'no take'}
+                      </span>
+                    </button>
+                  ))}
+                  <div style={{ padding: '4px 16px 0' }}>
+                    <AddTrackForm songId={song.id} onCreated={load} />
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <div style={{ padding: '4px 16px 0' }}>
           <AddSongForm projectId={projectId} onCreated={load} />
