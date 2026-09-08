@@ -9,16 +9,18 @@ const router = express.Router();
 
 const VALID_ROLES = ['ADMIN', 'CONTRIBUTOR', 'REVIEWER', 'VIEWER'];
 
-// POST /api/invites
-// Requires a logged-in Admin now — effective role is resolved for whichever
-// project this invite is scoped to (or the instance default, for an
-// instance-wide invite with no projectId).
-// body: { role, projectId? (optional -> instance-wide invite if omitted),
-//         expiresInDays? (optional) }
+// POST /api/invites — instance-ADMIN only, same as project membership
+// management: with per-project isolation the instance operator decides who
+// gets into which project.
+//   - Give a projectId to invite someone straight onto that project at `role`
+//     (a Membership is created on redeem).
+//   - Omit projectId only to mint another instance administrator — role must
+//     then be ADMIN. A non-ADMIN instance-wide invite would grant nothing.
+// body: { role, projectId?, expiresInDays? }
 router.post(
   '/invites',
   requireAuth,
-  requireRole(['ADMIN'], (req) => ({ projectId: req.body.projectId || undefined })),
+  requireRole(['ADMIN'], () => ({})),
   async (req, res) => {
     try {
       const { role, projectId, expiresInDays } = req.body;
@@ -29,6 +31,18 @@ router.post(
       }
       if (!VALID_ROLES.includes(role)) {
         return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
+      }
+
+      if (projectId) {
+        const project = await prisma.project.findUnique({ where: { id: projectId } });
+        if (!project) {
+          return res.status(404).json({ error: `No project found with id ${projectId}.` });
+        }
+      } else if (role !== 'ADMIN') {
+        return res.status(400).json({
+          error:
+            'An invite with no project must be role ADMIN (it creates an instance administrator). Give a projectId to invite someone onto a project.',
+        });
       }
 
       const expiresAt = expiresInDays
@@ -111,33 +125,50 @@ router.post('/invites/:token/redeem', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const user = await prisma.$transaction(async (tx) => {
-      // A project-scoped invite still needs some baseline instanceRole,
-      // since the three-tier cascade always falls back to it eventually.
-      // VIEWER is the safe minimum — real access for this project comes
-      // from the Membership row created below, not from this default.
-      const newUser = await tx.user.create({
-        data: {
-          name,
-          email,
-          passwordHash,
-          instanceRole: invite.projectId ? 'VIEWER' : invite.role,
-        },
-      });
-
-      if (invite.projectId) {
-        await tx.membership.create({
-          data: { userId: newUser.id, projectId: invite.projectId, role: invite.role },
+    const INVITE_TAKEN = Symbol('invite-already-used');
+    let user;
+    try {
+      user = await prisma.$transaction(async (tx) => {
+        // Claim the invite first, conditionally on it still being unused, so
+        // two redeems racing on the same token can't both create an account.
+        const claimed = await tx.invite.updateMany({
+          where: { id: invite.id, usedAt: null },
+          data: { usedAt: new Date() },
         });
-      }
+        if (claimed.count === 0) throw INVITE_TAKEN;
 
-      await tx.invite.update({
-        where: { id: invite.id },
-        data: { usedAt: new Date(), usedById: newUser.id },
+        // A project-scoped invite still needs some baseline instanceRole (the
+        // column is required); it's inert under per-project access control —
+        // real access comes from the Membership created below. VIEWER is the
+        // safe minimum. An invite with no project is an instance-admin invite.
+        const newUser = await tx.user.create({
+          data: {
+            name,
+            email,
+            passwordHash,
+            instanceRole: invite.projectId ? 'VIEWER' : invite.role,
+          },
+        });
+
+        if (invite.projectId) {
+          await tx.membership.create({
+            data: { userId: newUser.id, projectId: invite.projectId, role: invite.role },
+          });
+        }
+
+        await tx.invite.update({
+          where: { id: invite.id },
+          data: { usedById: newUser.id },
+        });
+
+        return newUser;
       });
-
-      return newUser;
-    });
+    } catch (e) {
+      if (e === INVITE_TAKEN) {
+        return res.status(410).json({ error: 'This invite has already been used.' });
+      }
+      throw e;
+    }
 
     // Redeeming an invite should log you straight in, not dump you at a
     // login screen right after signing up — same session-creation logic
