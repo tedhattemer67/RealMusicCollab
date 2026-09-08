@@ -3,15 +3,42 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { hasProjectAccess } = require('../lib/roles');
 
 const router = express.Router();
 
-// GET /api/users — everyone active, for picking a performer/assignee.
-// Same "list everything, don't filter by project" honesty as GET /projects:
-// nothing in this schema models restricting who a user can see, only
-// granting roles, so there's no real access-control corner being cut here.
+// GET /api/users
+//   ?projectId=<id>  -> the members of that project (id + name only), for the
+//                       performer / assignee pickers. Any member of that
+//                       project (or an instance admin) may read it.
+//   no query param   -> every active user, for the instance admin's
+//                       "add someone to a project" search. Instance ADMIN only
+//                       now — with per-project isolation, one band shouldn't
+//                       get the full account list of the whole instance.
 router.get('/users', requireAuth, async (req, res) => {
   try {
+    const { projectId } = req.query;
+
+    if (projectId) {
+      const allowed =
+        req.user.instanceRole === 'ADMIN' ||
+        (await hasProjectAccess(req.user.id, { projectId }));
+      if (!allowed) {
+        return res.status(404).json({ error: 'Not found.' });
+      }
+      const memberships = await prisma.membership.findMany({
+        where: { projectId, user: { active: true } },
+        orderBy: { user: { name: 'asc' } },
+        select: { user: { select: { id: true, name: true } }, role: true },
+      });
+      return res.json(
+        memberships.map((m) => ({ id: m.user.id, name: m.user.name, role: m.role }))
+      );
+    }
+
+    if (req.user.instanceRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'This action requires one of: ADMIN.' });
+    }
     const users = await prisma.user.findMany({
       where: { active: true },
       orderBy: { name: 'asc' },

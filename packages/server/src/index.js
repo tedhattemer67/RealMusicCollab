@@ -24,6 +24,7 @@ const tracksRouter = require('./routes/tracks');
 const usersRouter = require('./routes/users');
 const bootstrapRouter = require('./routes/bootstrap');
 const notificationChannelsRouter = require('./routes/notificationChannels');
+const membersRouter = require('./routes/members');
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api', tracksRouter);
 app.use('/api', usersRouter);
 app.use('/api', bootstrapRouter);
 app.use('/api', notificationChannelsRouter);
+app.use('/api', membersRouter);
 
 // Only start listening when run directly (npm start / npm run dev). When this
 // module is require()'d by the test suite, the test harness binds its own
