@@ -65,7 +65,14 @@ app.use('/api', usersRouter);
 app.use('/api', bootstrapRouter);
 app.use('/api', notificationChannelsRouter);
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
+// Only start listening when run directly (npm start / npm run dev). When this
+// module is require()'d by the test suite, the test harness binds its own
+// ephemeral port instead, so importing the app has no side effects.
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+  });
+}
+
+module.exports = app;

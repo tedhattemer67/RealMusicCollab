@@ -8,7 +8,7 @@
     "packages/client"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test \"packages/server/test/*.test.js\"",
     "dev:server": "npm run dev --workspace packages/server",
     "start:server": "npm run start --workspace packages/server",
     "dev:client": "npm run dev --workspace packages/client",

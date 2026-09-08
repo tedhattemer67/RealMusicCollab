@@ -11,15 +11,19 @@ const router = express.Router();
 // existing one — defaulting to consistency with everything else for now.)
 const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 
-// GET /api/projects — every project, since nothing in this schema models a
-// "deny": Membership/SongRoleOverride only ever grant a role, they never
-// restrict one below the instance default. Every user already has some
-// role on every project, so listing all of them is the honest behavior
-// here, not a shortcut around access control that doesn't actually exist.
+// GET /api/projects — the projects this user can actually see. Instance
+// ADMINs get every non-hidden project (they operate the instance); everyone
+// else gets only the projects they hold a Membership on. This is the list
+// counterpart to the per-route membership checks — a non-member never learns
+// another band's project exists.
 router.get('/projects', requireAuth, async (req, res) => {
   try {
+    const isInstanceAdmin = req.user.instanceRole === 'ADMIN';
     const projects = await prisma.project.findMany({
-      where: { hidden: false },
+      where: {
+        hidden: false,
+        ...(isInstanceAdmin ? {} : { memberships: { some: { userId: req.user.id } } }),
+      },
       orderBy: { updatedAt: 'desc' },
       select: { id: true, name: true, caption: true, kind: true, updatedAt: true },
     });
