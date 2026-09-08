@@ -166,7 +166,9 @@ router.post('/projects/:projectId/songs', requireAuth, requireRole(UPLOADER_ROLE
 router.patch(
   '/projects/:projectId',
   requireAuth,
-  requireRole(['ADMIN'], (req) => ({ projectId: req.params.projectId })),
+  // Instance-ADMIN only — this is a Manage Projects (instance settings) action,
+  // not something a project's own admin does.
+  requireRole(['ADMIN'], () => ({})),
   async (req, res) => {
     try {
       const { hidden } = req.body;

@@ -105,3 +105,26 @@ unfreeze, downloads, to-dos — see `CLAUDE.md` for the full list).
 - Since `STORAGE_ADAPTER` is set at the Render service level, not baked into
   a commit, your **local machine can keep using `LOCAL` storage for
   everyday testing** without touching production data in S3, and vice versa.
+
+## Deploying the per-project access-control change
+
+Projects are now private to their members. On the first deploy that includes
+this change, every non-ADMIN user loses access to everything until they have a
+`Membership` row for a project. No schema migration is involved — the change is
+all application code — but decide how to handle existing users **before** you
+push:
+
+- **Clean slate** (recommended if the instance is basically one band): push,
+  then as an instance ADMIN open each project and add the right people from the
+  sidebar **Members** panel. Instance ADMINs keep full access throughout.
+- **Preserve current behaviour, then prune:** with `DATABASE_URL` pointed at
+  the production database, run
+  `node scripts/backfill-memberships.js` (report — writes nothing) and then
+  `node scripts/backfill-memberships.js --backfill` to give every existing
+  non-ADMIN user a membership on every existing project at their current role.
+  Remove the ones you don't want from each project's Members panel afterwards.
+
+Also note: creating projects, managing project membership, and creating invites
+are now **instance-ADMIN only**. An invite must name a project (it creates a
+Membership on redeem) unless it's an ADMIN-role invite, which mints another
+instance administrator.
