@@ -18,5 +18,8 @@
   "dependencies": {
     "prisma": "^6.19.3",
     "@prisma/client": "^6.19.3"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }
