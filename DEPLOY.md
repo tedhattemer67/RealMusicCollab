@@ -1,9 +1,7 @@
 # Deploying to Render
 
-You already have the pieces this depends on: everything's on GitHub, the
-Postgres database is already running on Render, and you have real S3
-credentials from today's setup. This walks through making the actual app
-(backend + frontend) live.
+Everything's on GitHub, the Postgres database, and S3
+
 
 ## Step 1: Deploy the backend as a Web Service
 
