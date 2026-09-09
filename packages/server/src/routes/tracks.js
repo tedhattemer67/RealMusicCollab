@@ -3,10 +3,9 @@ const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { recordEvent } = require('../lib/events');
+const { UPLOADER_ROLES } = require('../lib/roles');
 
 const router = express.Router();
-
-const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 
 async function resolveSongIdForTrack(req) {
   const track = await prisma.track.findUnique({

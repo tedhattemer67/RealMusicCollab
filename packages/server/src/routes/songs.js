@@ -5,7 +5,7 @@ const requireRole = require('../middleware/requireRole');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const { parseBatchFilenames } = require('../lib/filenameParser');
 const { recordEvent } = require('../lib/events');
-const { MEMBER_ROLES } = require('../lib/roles');
+const { MEMBER_ROLES, UPLOADER_ROLES } = require('../lib/roles');
 const { upload: uploadMemory } = require('../lib/upload');
 
 const router = express.Router();
@@ -14,10 +14,6 @@ const router = express.Router();
 // Viewer "listen/comment only" limit still lets them request a reopen; only
 // freezing and resolving the request are Admin-gated.
 const scopeSong = (req) => ({ songId: req.params.songId });
-
-// Not Viewer (listen/comment only) and not Reviewer (approves, doesn't
-// upload) — only Admin and Contributor can add material.
-const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 
 // POST /api/songs/:songId/freeze — Admin only.
 router.post(
@@ -431,23 +427,37 @@ router.post(
           }
 
           const storageKey = await writeFile(storageConfig, trackId, file.originalname, file.buffer);
-
-          const existingTakeCount = await prisma.take.count({ where: { trackId } });
-          const takeNumber = existingTakeCount + 1;
           const performedById = item.performedById || req.user.id;
 
-          const take = await prisma.take.create({
-            data: {
-              trackId,
-              takeNumber,
-              storageConfigId: storageConfig.id,
-              storageKey,
-              performedById,
-              uploadedById: req.user.id,
-              note: item.note || null,
-              readyForFeedback: true,
-            },
-          });
+          // See takes.js's single-upload route for why this retries on a
+          // @@unique([trackId, takeNumber]) collision instead of letting it
+          // fail this one file outright — another upload to the same track
+          // (a concurrent batch, or the regular single-take route) can land
+          // between the count and the create.
+          let take;
+          let takeNumber;
+          for (let attempt = 0; ; attempt += 1) {
+            const existingTakeCount = await prisma.take.count({ where: { trackId } });
+            takeNumber = existingTakeCount + 1;
+            try {
+              take = await prisma.take.create({
+                data: {
+                  trackId,
+                  takeNumber,
+                  storageConfigId: storageConfig.id,
+                  storageKey,
+                  performedById,
+                  uploadedById: req.user.id,
+                  note: item.note || null,
+                  readyForFeedback: true,
+                },
+              });
+              break;
+            } catch (err) {
+              if (err.code === 'P2002' && attempt < 5) continue;
+              throw err;
+            }
+          }
 
           // Same promotion rule as everywhere else: a brand-new track's
           // first take always becomes current; for an existing track, only

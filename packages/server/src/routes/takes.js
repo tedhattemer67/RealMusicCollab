@@ -3,15 +3,11 @@ const prisma = require('../prisma');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { MEMBER_ROLES } = require('../lib/roles');
+const { MEMBER_ROLES, UPLOADER_ROLES, canSeeDraftTakes } = require('../lib/roles');
 const { recordEvent } = require('../lib/events');
 const { upload } = require('../lib/upload');
 
 const router = express.Router();
-
-// Not Viewer (listen/comment only, by design) and not Reviewer (approves,
-// doesn't upload, by design) — only Admin and Contributor can add material.
-const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 
 async function resolveSongIdForTrack(req) {
   const track = await prisma.track.findUnique({
@@ -79,27 +75,40 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
     }
 
     const storageConfig = await getDefaultStorageConfig();
-
-    // takeNumber is sequential per track — computed here, not left to the
-    // database, per how we designed it.
-    const existingTakeCount = await prisma.take.count({ where: { trackId } });
-    const takeNumber = existingTakeCount + 1;
-
     const storageKey = await writeFile(storageConfig, trackId, req.file.originalname, req.file.buffer);
 
-    const take = await prisma.take.create({
-      data: {
-        trackId,
-        takeNumber,
-        storageConfigId: storageConfig.id,
-        storageKey,
-        performedById,
-        uploadedById,
-        note: note || null,
-        recordedOn: recordedOn ? new Date(recordedOn) : null,
-        readyForFeedback: readyForFeedback === 'false' ? false : true,
-      },
-    });
+    // takeNumber is sequential per track — computed here, not left to the
+    // database. Two uploads to the same track landing close together can
+    // both read the same count and then collide on
+    // @@unique([trackId, takeNumber]); retried a few times (re-reading the
+    // count each attempt) instead of surfacing that collision as a raw
+    // 500 — by the retry, the other upload has already committed and the
+    // count has moved on.
+    let take;
+    let takeNumber;
+    for (let attempt = 0; ; attempt += 1) {
+      const existingTakeCount = await prisma.take.count({ where: { trackId } });
+      takeNumber = existingTakeCount + 1;
+      try {
+        take = await prisma.take.create({
+          data: {
+            trackId,
+            takeNumber,
+            storageConfigId: storageConfig.id,
+            storageKey,
+            performedById,
+            uploadedById,
+            note: note || null,
+            recordedOn: recordedOn ? new Date(recordedOn) : null,
+            readyForFeedback: readyForFeedback === 'false' ? false : true,
+          },
+        });
+        break;
+      } catch (err) {
+        if (err.code === 'P2002' && attempt < 5) continue;
+        throw err;
+      }
+    }
 
     // The role-dependent promotion rule we designed: an Admin's own upload
     // auto-promotes to the track's current default; anyone else's lands as
@@ -142,7 +151,14 @@ router.post('/tracks/:trackId/takes', requireAuth, requireRole(UPLOADER_ROLES, r
 router.get('/tracks/:trackId/takes', requireAuth, requireRole(MEMBER_ROLES, resolveSongIdForTrack, { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const takes = await prisma.take.findMany({
-      where: { trackId: req.params.trackId },
+      where: {
+        trackId: req.params.trackId,
+        // "Private draft" takes are only visible to the roles that can
+        // actually upload material — Reviewer/Viewer (the audience the
+        // readyForFeedback flag is named for) don't see them at all until
+        // marked ready, not just via a "draft" badge on an otherwise-visible row.
+        ...(canSeeDraftTakes(req.effectiveRole) ? {} : { readyForFeedback: true }),
+      },
       orderBy: { takeNumber: 'asc' },
       include: {
         performedBy: { select: { id: true, name: true } },

@@ -65,4 +65,17 @@ async function hasProjectAccess(userId, { projectId, songId } = {}) {
 // this to requireRole.
 const MEMBER_ROLES = ['ADMIN', 'CONTRIBUTOR', 'REVIEWER', 'VIEWER'];
 
-module.exports = { getEffectiveRole, hasProjectAccess, MEMBER_ROLES };
+// Roles allowed to upload material — not Viewer (listen/comment only, by
+// design) and not Reviewer (approves, doesn't upload, by design).
+const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
+
+// A take can be marked readyForFeedback:false ("private draft" — still a
+// work in progress). Same role split as uploading: the people actively
+// producing material can see their own and each other's drafts; Reviewer/
+// Viewer (the "feedback" audience the flag is named for) can't, until it's
+// marked ready.
+function canSeeDraftTakes(role) {
+  return UPLOADER_ROLES.includes(role);
+}
+
+module.exports = { getEffectiveRole, hasProjectAccess, MEMBER_ROLES, UPLOADER_ROLES, canSeeDraftTakes };

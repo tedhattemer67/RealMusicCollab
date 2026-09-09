@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { hasProjectAccess } = require('../lib/roles');
+const { SESSION_COOKIE_NAME } = require('../constants');
 
 const router = express.Router();
 
@@ -75,6 +76,16 @@ router.patch('/users/me/password', requireAuth, async (req, res) => {
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({ where: { id: req.user.id }, data: { passwordHash } });
 
+    // A password change should sign out every OTHER session for this
+    // account (a shared machine, an old logged-in device) — but not the
+    // one making this request, which would otherwise self-log-out the
+    // person who just proved they know the new password.
+    const currentSessionId = req.cookies[SESSION_COOKIE_NAME];
+    await prisma.session.updateMany({
+      where: { userId: req.user.id, revokedAt: null, id: { not: currentSessionId } },
+      data: { revokedAt: new Date() },
+    });
+
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -103,6 +114,15 @@ router.patch(
 
       const passwordHash = await bcrypt.hash(newPassword, 10);
       await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+      // An admin-initiated reset is often a response to a compromised or
+      // departing account — leaving that user's existing sessions live
+      // would defeat the point. Unlike the self-service change above,
+      // there's no "current session" of theirs to preserve here.
+      await prisma.session.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
 
       res.json({ ok: true });
     } catch (err) {

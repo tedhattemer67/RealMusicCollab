@@ -15,9 +15,19 @@ const { notifyChannels } = require('./notify');
 // just be a duplicate query. Pass no message to log an event without
 // notifying anyone (kept available for future silent/internal events).
 async function recordEvent({ action, actorId, entityType, entityId, projectId, metadata, message }) {
-  const entry = await prisma.auditLog.create({
-    data: { action, actorId, entityType, entityId, metadata },
-  });
+  // Every call site awaits this after its real action has already
+  // committed, purely to log it — a logging failure (a transient DB blip,
+  // say) must never turn an action that actually succeeded into a 500 the
+  // caller sees. Same "never throws" contract as notifyChannels below.
+  let entry;
+  try {
+    entry = await prisma.auditLog.create({
+      data: { action, actorId, entityType, entityId, metadata },
+    });
+  } catch (err) {
+    console.error('Failed to record audit log entry:', err);
+    return null;
+  }
 
   if (message) {
     // Deliberately not awaited — a slow or failing webhook must never delay

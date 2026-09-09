@@ -6,6 +6,7 @@ const requireRole = require('../middleware/requireRole');
 const { SESSION_COOKIE_NAME, SESSION_DURATION_MS, getSessionCookieOptions } = require('../constants');
 const { generateSecureToken } = require('../lib/tokens');
 const { authLimiter } = require('../middleware/rateLimit');
+const { isValidEmail } = require('../lib/validation');
 
 const router = express.Router();
 
@@ -101,6 +102,9 @@ router.post('/invites/:token/redeem', authLimiter, async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'name, email, and password are all required.' });
     }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'That email address does not look valid.' });
+    }
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters.' });
     }
@@ -168,6 +172,16 @@ router.post('/invites/:token/redeem', authLimiter, async (req, res) => {
     } catch (e) {
       if (e === INVITE_TAKEN) {
         return res.status(410).json({ error: 'This invite has already been used.' });
+      }
+      // The findUnique(email) check above has its own, smaller gap: two
+      // different invites redeemed for the same email at nearly the same
+      // moment could both pass it and then collide on the DB's unique
+      // email constraint here. Same friendly response as catching it
+      // up front, instead of a raw 500.
+      if (e && e.code === 'P2002') {
+        return res.status(409).json({
+          error: 'An account with this email already exists. Log in instead (not built yet) rather than signing up again.',
+        });
       }
       throw e;
     }

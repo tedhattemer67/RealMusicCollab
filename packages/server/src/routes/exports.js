@@ -10,6 +10,21 @@ const { exportLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
+// song.title / track.name / project.name are free-text and flow straight
+// into a Content-Disposition header value and into ZIP entry names below —
+// sanitize each one as an individual path SEGMENT (strip slashes/backslashes
+// so a crafted name can't inject an extra path level; strip control
+// characters and the quote character that would break filename="...";
+// collapse a segment that's now just dots so it can't act as a zip-slip
+// "../" traversal once joined with the "/"s this code controls itself).
+function sanitizeExportSegment(segment) {
+  const cleaned = String(segment)
+    .replace(/[/\\]/g, '_')
+    .replace(/[\x00-\x1f\x7f"]/g, '')
+    .trim();
+  return /^\.*$/.test(cleaned) || cleaned === '' ? 'untitled' : cleaned;
+}
+
 // POST /api/songs/:songId/export
 // body: {
 //   mode: 'working' | 'handoff'   (required)
@@ -67,7 +82,7 @@ router.post('/songs/:songId/export', requireAuth, exportLimiter, requireRole(MEM
     });
     const takeById = new Map(takes.map((t) => [t.id, t]));
 
-    const zipName = `${song.title.replace(/\s+/g, '_')}_export.zip`;
+    const zipName = `${sanitizeExportSegment(song.title).replace(/\s+/g, '_')}_export.zip`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
 
@@ -93,7 +108,7 @@ router.post('/songs/:songId/export', requireAuth, exportLimiter, requireRole(MEM
       const result = await getReadStream(take.storageConfig, take.storageKey);
       if (!result) continue;
 
-      const trackName = take.track.name;
+      const trackName = sanitizeExportSegment(take.track.name);
       const filename =
         mode === 'handoff'
           ? `${trackName}.wav`
@@ -117,7 +132,9 @@ router.post('/songs/:songId/export', requireAuth, exportLimiter, requireRole(MEM
       const mixResult = await getReadStream(song.currentMix.storageConfig, song.currentMix.storageKey);
       if (mixResult) {
         const mixFilename =
-          mode === 'handoff' ? `${song.title} (Mix).wav` : `Mix_v${song.currentMix.mixNumber}.wav`;
+          mode === 'handoff'
+            ? `${sanitizeExportSegment(song.title)} (Mix).wav`
+            : `Mix_v${song.currentMix.mixNumber}.wav`;
         archive.append(mixResult.stream, { name: mixFilename });
         if (mode === 'handoff') {
           manifestLines.push(`Mix: v${song.currentMix.mixNumber} (${song.currentMix.status})`);
@@ -185,7 +202,7 @@ router.post(
         return res.status(404).json({ error: `No project found with id ${projectId}.` });
       }
 
-      const zipName = `${project.name.replace(/\s+/g, '_')}_full_archive.zip`;
+      const zipName = `${sanitizeExportSegment(project.name).replace(/\s+/g, '_')}_full_archive.zip`;
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
 
@@ -203,13 +220,18 @@ router.post(
       const manifestLines = [`Full archive: ${project.name}`, ''];
 
       for (const song of project.songs) {
+        // Sanitized once per song/track and reused for both the zip path
+        // and the manifest, so the two can't disagree about what a take
+        // belongs to.
+        const songSegment = sanitizeExportSegment(song.title);
         manifestLines.push(`## ${song.title}`);
         for (const track of song.tracks) {
+          const trackSegment = sanitizeExportSegment(track.name);
           manifestLines.push(`  ${track.name}:`);
           for (const take of track.takes) {
             const result = await getReadStream(take.storageConfig, take.storageKey);
             if (result) {
-              const filename = `${song.title}/${track.name}/Take${take.takeNumber}.wav`;
+              const filename = `${songSegment}/${trackSegment}/Take${take.takeNumber}.wav`;
               archive.append(result.stream, { name: filename });
             }
             const isDefault = take.id === track.currentTakeId ? ' (was current default)' : '';
@@ -221,7 +243,7 @@ router.post(
         for (const mix of song.mixes) {
           const result = await getReadStream(mix.storageConfig, mix.storageKey);
           if (result) {
-            const filename = `${song.title}/Mix_v${mix.mixNumber}.wav`;
+            const filename = `${songSegment}/Mix_v${mix.mixNumber}.wav`;
             archive.append(result.stream, { name: filename });
           }
           manifestLines.push(`  Mix v${mix.mixNumber} — ${mix.status}`);

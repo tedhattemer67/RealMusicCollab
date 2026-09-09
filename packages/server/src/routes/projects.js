@@ -2,15 +2,9 @@ const express = require('express');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { MEMBER_ROLES } = require('../lib/roles');
+const { MEMBER_ROLES, UPLOADER_ROLES, canSeeDraftTakes } = require('../lib/roles');
 
 const router = express.Router();
-
-// Adding songs to an existing project — Admin or Contributor (not Viewer /
-// Reviewer). Creating a whole new Project is tighter: instance-ADMIN only
-// (see POST /projects), since with per-project isolation the person spinning
-// up a project is also the one deciding who gets into it.
-const UPLOADER_ROLES = ['ADMIN', 'CONTRIBUTOR'];
 
 // GET /api/projects — the projects this user can actually see. Instance
 // ADMINs get every non-hidden project (they operate the instance); everyone
@@ -80,7 +74,7 @@ router.get('/projects/:projectId', requireAuth, requireRole(MEMBER_ROLES, (req) 
             tracks: {
               orderBy: { createdAt: 'asc' },
               include: {
-                currentTake: { select: { id: true, takeNumber: true } },
+                currentTake: { select: { id: true, takeNumber: true, readyForFeedback: true } },
                 _count: { select: { takes: true } },
               },
             },
@@ -94,6 +88,20 @@ router.get('/projects/:projectId', requireAuth, requireRole(MEMBER_ROLES, (req) 
       return res
         .status(404)
         .json({ error: `No project found with id ${req.params.projectId}.` });
+    }
+
+    // An Admin's own draft upload still auto-promotes to currentTakeId (see
+    // takes.js) — strip that pointer out here for roles that can't see
+    // drafts, same as the takes list and stream routes, so "current take"
+    // doesn't leak a draft's existence/number to a Reviewer/Viewer.
+    if (!canSeeDraftTakes(req.effectiveRole)) {
+      for (const song of project.songs) {
+        for (const track of song.tracks) {
+          if (track.currentTake && !track.currentTake.readyForFeedback) {
+            track.currentTake = null;
+          }
+        }
+      }
     }
 
     // The caller's effective role for this project, so the client can show

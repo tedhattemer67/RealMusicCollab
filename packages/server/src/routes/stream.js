@@ -4,7 +4,7 @@ const path = require('path');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { MEMBER_ROLES } = require('../lib/roles');
+const { MEMBER_ROLES, canSeeDraftTakes } = require('../lib/roles');
 const { fromTakeParam, fromMixParam } = require('../lib/scope');
 const { LOCAL_ROOT, getRedirectUrl } = require('../storage');
 
@@ -29,8 +29,18 @@ function streamLocalFile(req, res, absolutePath) {
     const parts = range.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-    const chunkSize = end - start + 1;
 
+    // A malformed Range header (non-numeric, start past the end of the
+    // file, or a backwards range) used to fall straight through to a NaN
+    // Content-Length and a broken stream — reject it properly instead,
+    // same as any real HTTP server would.
+    const isValidRange = Number.isInteger(start) && Number.isInteger(end) && start >= 0 && start <= end && end < fileSize;
+    if (!isValidRange) {
+      res.setHeader('Content-Range', `bytes */${fileSize}`);
+      return res.status(416).end();
+    }
+
+    const chunkSize = end - start + 1;
     res.writeHead(206, {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Content-Length': chunkSize,
@@ -70,7 +80,10 @@ router.get('/takes/:takeId/stream', requireAuth, requireRole(MEMBER_ROLES, fromT
       where: { id: req.params.takeId },
       include: { storageConfig: true },
     });
-    if (!take) {
+    // Same 404-hides-existence treatment as a non-member: a "private
+    // draft" take's audio isn't reachable by anyone outside the roles
+    // that can upload material, even with a direct link to it.
+    if (!take || (!take.readyForFeedback && !canSeeDraftTakes(req.effectiveRole))) {
       return res.status(404).json({ error: `No take found with id ${req.params.takeId}.` });
     }
     await streamOrRedirect(req, res, take.storageConfig, take.storageKey);
