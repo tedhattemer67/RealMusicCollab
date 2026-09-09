@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { SESSION_COOKIE_NAME, SESSION_DURATION_MS, getSessionCookieOptions } = require('../constants');
+const { generateSecureToken } = require('../lib/tokens');
 
 const router = express.Router();
 
@@ -50,7 +51,7 @@ router.post(
         : null;
 
       const invite = await prisma.invite.create({
-        data: { role, createdById, projectId: projectId || null, expiresAt },
+        data: { token: generateSecureToken(), role, createdById, projectId: projectId || null, expiresAt },
       });
 
       // redeemUrl is just a suggested shape for the frontend route —
@@ -174,7 +175,11 @@ router.post('/invites/:token/redeem', async (req, res) => {
     // login screen right after signing up — same session-creation logic
     // as the real login route, using the same shared constants.
     const session = await prisma.session.create({
-      data: { userId: user.id, expiresAt: new Date(Date.now() + SESSION_DURATION_MS) },
+      data: {
+        id: generateSecureToken(),
+        userId: user.id,
+        expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
+      },
     });
     res.cookie(SESSION_COOKIE_NAME, session.id, getSessionCookieOptions());
 

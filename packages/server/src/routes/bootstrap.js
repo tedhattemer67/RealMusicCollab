@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
 const { SESSION_COOKIE_NAME, SESSION_DURATION_MS, getSessionCookieOptions } = require('../constants');
+const { generateSecureToken } = require('../lib/tokens');
 
 const router = express.Router();
 
@@ -48,7 +49,11 @@ router.post('/bootstrap', async (req, res) => {
     });
 
     const session = await prisma.session.create({
-      data: { userId: user.id, expiresAt: new Date(Date.now() + SESSION_DURATION_MS) },
+      data: {
+        id: generateSecureToken(),
+        userId: user.id,
+        expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
+      },
     });
     res.cookie(SESSION_COOKIE_NAME, session.id, getSessionCookieOptions());
 

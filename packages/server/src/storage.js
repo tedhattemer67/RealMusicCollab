@@ -24,6 +24,16 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+// originalFilename comes straight from the uploader's file — path.basename
+// strips any directory components (so "../../etc/passwd" can't escape
+// LOCAL_ROOT, and a crafted name can't smuggle extra S3 "directories" into
+// the key), and the character whitelist keeps the result safe to drop into
+// a Content-Disposition header or a ZIP entry name downstream.
+function sanitizeFilename(originalFilename) {
+  const base = path.basename(originalFilename).replace(/[^A-Za-z0-9._-]/g, '_');
+  return base || 'file';
+}
+
 async function getOrCreateDefaultLocalConfig() {
   let config = await prisma.storageConfig.findFirst({
     where: { type: 'LOCAL', isDefault: true },
@@ -92,7 +102,7 @@ function getS3Client(settings) {
 // the storageKey to save on the Take/Mix row. This is the one function every
 // upload route calls — it doesn't need to know which adapter is active.
 async function writeFile(storageConfig, keyPrefix, originalFilename, buffer) {
-  const filename = `${Date.now()}-${originalFilename}`;
+  const filename = `${Date.now()}-${sanitizeFilename(originalFilename)}`;
   const key = `${keyPrefix}/${filename}`;
 
   if (storageConfig.type === 'LOCAL') {

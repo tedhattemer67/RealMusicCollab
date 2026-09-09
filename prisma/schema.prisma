@@ -367,7 +367,11 @@ model NotificationChannel {
 
 model Invite {
   id          String    @id @default(cuid())
-  token       String    @unique @default(cuid()) // the secret in the shareable URL
+  // The secret in the shareable URL. @default(cuid()) is a fallback only —
+  // application code always supplies an explicit CSPRNG token
+  // (crypto.randomBytes(32).toString('base64url')) on create; see the
+  // Session model above for why cuid alone isn't enough for a bearer secret.
+  token       String    @unique @default(cuid())
   // Null projectId = an instance-wide invite (grants an instanceRole).
   // Set projectId = scoped to one project (grants a Membership on that project).
   projectId   String?
@@ -527,7 +531,11 @@ model AuditLog {
 // deactivated user's access can be cut off immediately by revoking their
 // sessions, rather than waiting for a token to expire on its own. The
 // session's own id is what gets stored in the browser cookie; there's no
-// separate token field, since a cuid is already unguessable enough.
+// separate token field. The @default(cuid()) below is a fallback only —
+// application code always supplies an explicit CSPRNG id
+// (crypto.randomBytes(32).toString('base64url')) on create, since cuid is
+// optimized for uniqueness/collision-avoidance, not unguessability, and
+// this id doubles as a bearer credential.
 // ============================================================
 
 model Session {
