@@ -6,6 +6,7 @@ const requireRole = require('../middleware/requireRole');
 const { MEMBER_ROLES } = require('../lib/roles');
 const { getReadStream } = require('../storage');
 const { recordEvent } = require('../lib/events');
+const { exportLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ const router = express.Router();
 // }
 // All roles, including Viewer, can hit this — matches how we designed export —
 // but only members of the song's project.
-router.post('/songs/:songId/export', requireAuth, requireRole(MEMBER_ROLES, (req) => ({ songId: req.params.songId }), { notFoundOnNoAccess: true }), async (req, res) => {
+router.post('/songs/:songId/export', requireAuth, exportLimiter, requireRole(MEMBER_ROLES, (req) => ({ songId: req.params.songId }), { notFoundOnNoAccess: true }), async (req, res) => {
   try {
     const { songId } = req.params;
     const { mode, tracks, includeMix } = req.body;
@@ -155,6 +156,7 @@ router.post('/songs/:songId/export', requireAuth, requireRole(MEMBER_ROLES, (req
 router.post(
   '/projects/:projectId/archive',
   requireAuth,
+  exportLimiter,
   requireRole(['ADMIN'], (req) => ({ projectId: req.params.projectId })),
   async (req, res) => {
     try {

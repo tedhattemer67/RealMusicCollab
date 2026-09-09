@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../prisma');
 const { SESSION_COOKIE_NAME, SESSION_DURATION_MS, getSessionCookieOptions } = require('../constants');
 const { generateSecureToken } = require('../lib/tokens');
+const { authLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.get('/bootstrap', async (req, res) => {
 // trusting whatever the GET check returned earlier) so this can never be
 // used to create a second, unintended Admin. Auto-logs in afterward, same
 // as invite redemption.
-router.post('/bootstrap', async (req, res) => {
+router.post('/bootstrap', authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {

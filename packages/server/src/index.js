@@ -9,6 +9,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '..
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const helmet = require('helmet');
+const multer = require('multer');
 const takesRouter = require('./routes/takes');
 const invitesRouter = require('./routes/invites');
 const authRouter = require('./routes/auth');
@@ -27,6 +29,19 @@ const notificationChannelsRouter = require('./routes/notificationChannels');
 const membersRouter = require('./routes/members');
 
 const app = express();
+
+// contentSecurityPolicy is meant for pages a browser renders — this server
+// only ever returns JSON and audio-stream bytes, so it's off. CORP defaults
+// to "same-origin", which would let the browser's own security policy block
+// the deployed frontend (a genuinely different origin from the API in
+// production) from consuming those streamed audio bytes even with CORS
+// headers present.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // CLIENT_ORIGIN needs to be set explicitly (not "*") because we're using
 // cookie-based sessions — browsers refuse a wildcard origin combined with
@@ -66,6 +81,21 @@ app.use('/api', usersRouter);
 app.use('/api', bootstrapRouter);
 app.use('/api', notificationChannelsRouter);
 app.use('/api', membersRouter);
+
+// Catches errors passed to next(err) — in practice, almost always multer
+// rejecting an upload (file too large, too many files, or the .wav
+// fileFilter in lib/upload.js) before a route handler's own try/catch ever
+// runs, since that rejection happens in upload middleware itself.
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(413).json({ error: `Upload rejected: ${err.message}` });
+  }
+  if (err && err.message === 'UNSUPPORTED_FILE_TYPE') {
+    return res.status(400).json({ error: 'Only .wav audio files are supported.' });
+  }
+  console.error(err);
+  res.status(500).json({ error: 'Something went wrong.' });
+});
 
 // Only start listening when run directly (npm start / npm run dev). When this
 // module is require()'d by the test suite, the test harness binds its own

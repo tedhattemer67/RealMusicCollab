@@ -1,17 +1,13 @@
 const express = require('express');
-const multer = require('multer');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { MEMBER_ROLES } = require('../lib/roles');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const { recordEvent } = require('../lib/events');
+const { upload } = require('../lib/upload');
 
 const router = express.Router();
-
-// Memory storage so the file can go through writeFile() and land on
-// whichever adapter is actually configured, instead of always disk.
-const upload = multer({ storage: multer.memoryStorage() });
 
 // POST /api/songs/:songId/mixes
 // multipart/form-data:

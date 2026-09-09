@@ -5,6 +5,7 @@ const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { SESSION_COOKIE_NAME, SESSION_DURATION_MS, getSessionCookieOptions } = require('../constants');
 const { generateSecureToken } = require('../lib/tokens');
+const { authLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -93,7 +94,7 @@ router.get('/invites/:token', async (req, res) => {
 
 // POST /api/invites/:token/redeem
 // body: { name, email, password }
-router.post('/invites/:token/redeem', async (req, res) => {
+router.post('/invites/:token/redeem', authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
 

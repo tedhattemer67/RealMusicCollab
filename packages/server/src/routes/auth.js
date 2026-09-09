@@ -4,12 +4,13 @@ const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const { SESSION_COOKIE_NAME, SESSION_DURATION_MS, getSessionCookieOptions } = require('../constants');
 const { generateSecureToken } = require('../lib/tokens');
+const { authLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
 // POST /api/login
 // body: { email, password }
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {

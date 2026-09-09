@@ -1,11 +1,11 @@
 const express = require('express');
-const multer = require('multer');
 const prisma = require('../prisma');
 const { getDefaultStorageConfig, writeFile } = require('../storage');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { MEMBER_ROLES } = require('../lib/roles');
 const { recordEvent } = require('../lib/events');
+const { upload } = require('../lib/upload');
 
 const router = express.Router();
 
@@ -20,11 +20,6 @@ async function resolveSongIdForTrack(req) {
   });
   return { songId: track ? track.songId : undefined };
 }
-
-// Memory storage, not disk storage — the file needs to go through
-// writeFile() so it can land on whichever adapter is actually configured
-// (LOCAL or S3), not always straight to this machine's disk.
-const upload = multer({ storage: multer.memoryStorage() });
 
 // POST /api/tracks/:trackId/takes
 // Requires a logged-in session — uploadedById comes from req.user, not the

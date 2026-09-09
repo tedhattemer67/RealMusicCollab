@@ -1,5 +1,4 @@
 const express = require('express');
-const multer = require('multer');
 const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
@@ -7,6 +6,7 @@ const { getDefaultStorageConfig, writeFile } = require('../storage');
 const { parseBatchFilenames } = require('../lib/filenameParser');
 const { recordEvent } = require('../lib/events');
 const { MEMBER_ROLES } = require('../lib/roles');
+const { upload: uploadMemory } = require('../lib/upload');
 
 const router = express.Router();
 
@@ -14,11 +14,6 @@ const router = express.Router();
 // Viewer "listen/comment only" limit still lets them request a reopen; only
 // freezing and resolving the request are Admin-gated.
 const scopeSong = (req) => ({ songId: req.params.songId });
-
-// Memory storage, not disk storage like the regular take-upload route —
-// the Track doesn't exist yet when the file arrives, so there's no id to
-// build a destination folder from until after we create the row.
-const uploadMemory = multer({ storage: multer.memoryStorage() });
 
 // Not Viewer (listen/comment only) and not Reviewer (approves, doesn't
 // upload) — only Admin and Contributor can add material.
