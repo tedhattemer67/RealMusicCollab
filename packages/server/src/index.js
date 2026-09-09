@@ -27,6 +27,8 @@ const usersRouter = require('./routes/users');
 const bootstrapRouter = require('./routes/bootstrap');
 const notificationChannelsRouter = require('./routes/notificationChannels');
 const membersRouter = require('./routes/members');
+const verifyOrigin = require('./middleware/verifyOrigin');
+const { CLIENT_ORIGIN } = require('./constants');
 
 const app = express();
 
@@ -49,7 +51,7 @@ app.use(
 // set the real env var once the frontend has a real deployed URL.
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    origin: CLIENT_ORIGIN,
     credentials: true,
     // Without this, a genuinely cross-origin frontend (once deployed
     // separately from the API) can't read the server's suggested filename
@@ -60,6 +62,7 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+app.use(verifyOrigin);
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });

@@ -7,6 +7,7 @@
 // ============================================================
 
 const prisma = require('../prisma');
+const { assertPublicHttpUrl } = require('./ssrf');
 
 // A project's own channels take over entirely once it has any — same
 // override semantics as StorageConfig (a project-specific config replaces
@@ -35,6 +36,16 @@ function buildPayload(channel, message) {
 // action that triggered it. Errors are logged, not surfaced to the caller.
 async function postToChannel(channel, message) {
   try {
+    // Re-checked at send time, not just at channel-creation time — the
+    // hostname a channel points at can be repointed via DNS at any point
+    // after it was saved. See lib/ssrf.js for what this rejects and why.
+    try {
+      await assertPublicHttpUrl(channel.webhookUrl);
+    } catch (err) {
+      console.error(`Refusing to post to notification channel ${channel.id}: ${err.message}`);
+      return;
+    }
+
     const res = await fetch(channel.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

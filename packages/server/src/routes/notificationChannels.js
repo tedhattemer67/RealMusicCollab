@@ -3,6 +3,7 @@ const prisma = require('../prisma');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { postToChannel } = require('../lib/notify');
+const { assertPublicHttpUrl } = require('../lib/ssrf');
 
 const router = express.Router();
 
@@ -59,6 +60,11 @@ router.post(
       }
       if (!webhookUrl || !/^https?:\/\//.test(webhookUrl)) {
         return res.status(400).json({ error: 'webhookUrl must be a valid http(s) URL.' });
+      }
+      try {
+        await assertPublicHttpUrl(webhookUrl);
+      } catch (err) {
+        return res.status(400).json({ error: err.message });
       }
 
       const channel = await prisma.notificationChannel.create({

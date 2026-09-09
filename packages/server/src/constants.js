@@ -1,6 +1,9 @@
 module.exports = {
   SESSION_COOKIE_NAME: 'session_id',
   SESSION_DURATION_MS: 30 * 24 * 60 * 60 * 1000, // 30 days
+  // Single source of truth for "what origin is the real frontend" — used by
+  // both the CORS config and the CSRF Origin check, so they can't drift.
+  CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   // A genuinely cross-origin deployment (frontend and backend on different
   // real URLs) needs secure + sameSite:'none' for the cookie to be sent at
   // all. Local dev needs the opposite — sameSite:'lax' and no secure flag,
