@@ -303,7 +303,13 @@ export default function ProjectTree({ user }) {
           <p style={{ margin: '4px 0 0' }}>
             <Link to="/" style={{ fontSize: 12 }}>&larr; All projects</Link>
           </p>
-          {user && user.instanceRole === 'ADMIN' && (
+          {/* Archive and notification channels: project-scoped ADMIN routes
+              (requireRole(['ADMIN'], {projectId})) — a project admin, not
+              just an instance admin, can use these. Member management below
+              is the real instance-admin-only case (members.js uses an empty
+              scope, so only the unconditional instance-ADMIN bypass
+              qualifies). */}
+          {project.myRole === 'ADMIN' && (
             <button
               className="btn btn-ghost"
               style={{ alignSelf: 'flex-start', paddingInline: 0 }}
@@ -317,7 +323,7 @@ export default function ProjectTree({ user }) {
           {user && user.instanceRole === 'ADMIN' && (
             <ProjectMembersPanel projectId={projectId} />
           )}
-          {user && user.instanceRole === 'ADMIN' && (
+          {project.myRole === 'ADMIN' && (
             <NotificationChannelsPanel projectId={projectId} />
           )}
         </div>
