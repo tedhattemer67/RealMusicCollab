@@ -45,7 +45,10 @@ export default function App() {
           user ? <Navigate to="/" /> : needsSetup ? <Navigate to="/setup" /> : <Login onLoggedIn={setUser} />
         }
       />
-      <Route path="/invite/:token" element={<RedeemInvite onRedeemed={setUser} />} />
+      <Route
+        path="/invite/:token"
+        element={<RedeemInvite user={user} onRedeemed={setUser} onLoggedOut={() => setUser(null)} />}
+      />
       <Route path="/setup" element={<Bootstrap onLoggedIn={setUser} />} />
       <Route
         path="/*"

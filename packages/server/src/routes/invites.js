@@ -12,6 +12,54 @@ const router = express.Router();
 
 const VALID_ROLES = ['ADMIN', 'CONTRIBUTOR', 'REVIEWER', 'VIEWER'];
 
+const INVITE_TAKEN = Symbol('invite-already-used');
+const ALREADY_HAS_ACCESS = Symbol('already-has-access');
+
+// An already-logged-in visitor (valid session cookie) redeeming an invite is
+// an existing user joining a second project (or, for a projectless invite,
+// picking up instance-admin) — not a new signup. The session cookie already
+// proves who they are, so no name/email/password is needed; just attach the
+// grant to that account. Never throws for "no session" — returns null so the
+// caller can fall back to the signup flow.
+async function getSessionUser(req) {
+  const sessionId = req.cookies[SESSION_COOKIE_NAME];
+  if (!sessionId) return null;
+
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: { user: true },
+  });
+  if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
+  if (!session.user.active) return null;
+  return session.user;
+}
+
+// Rolls back (leaves the invite unused) on ALREADY_HAS_ACCESS so a no-op
+// redeem doesn't burn a single-use invite that's still good for someone else.
+async function redeemForExistingUser(user, invite) {
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.invite.updateMany({
+      where: { id: invite.id, usedAt: null },
+      data: { usedAt: new Date(), usedById: user.id },
+    });
+    if (claimed.count === 0) throw INVITE_TAKEN;
+
+    if (invite.projectId) {
+      const existingMembership = await tx.membership.findUnique({
+        where: { userId_projectId: { userId: user.id, projectId: invite.projectId } },
+      });
+      if (existingMembership) throw ALREADY_HAS_ACCESS;
+
+      await tx.membership.create({
+        data: { userId: user.id, projectId: invite.projectId, role: invite.role },
+      });
+    } else {
+      if (user.instanceRole === 'ADMIN') throw ALREADY_HAS_ACCESS;
+      await tx.user.update({ where: { id: user.id }, data: { instanceRole: 'ADMIN' } });
+    }
+  });
+}
+
 // POST /api/invites — instance-ADMIN only, same as project membership
 // management: with per-project isolation the instance operator decides who
 // gets into which project.
@@ -97,6 +145,44 @@ router.get('/invites/:token', async (req, res) => {
 // body: { name, email, password }
 router.post('/invites/:token/redeem', authLimiter, async (req, res) => {
   try {
+    const invite = await prisma.invite.findUnique({
+      where: { token: req.params.token },
+      include: { project: true },
+    });
+
+    if (!invite) return res.status(404).json({ error: 'This invite link is not valid.' });
+    if (invite.usedAt) return res.status(410).json({ error: 'This invite has already been used.' });
+    if (invite.expiresAt && invite.expiresAt < new Date()) {
+      return res.status(410).json({ error: 'This invite has expired.' });
+    }
+
+    const sessionUser = await getSessionUser(req);
+    if (sessionUser) {
+      try {
+        await redeemForExistingUser(sessionUser, invite);
+      } catch (e) {
+        if (e === INVITE_TAKEN) {
+          return res.status(410).json({ error: 'This invite has already been used.' });
+        }
+        if (e === ALREADY_HAS_ACCESS) {
+          return res.status(409).json({
+            error: invite.projectId
+              ? `You're already a member of "${invite.project.name}".`
+              : 'Your account is already an instance administrator.',
+          });
+        }
+        throw e;
+      }
+
+      return res.status(200).json({
+        id: sessionUser.id,
+        name: sessionUser.name,
+        email: sessionUser.email,
+        instanceRole: invite.projectId ? sessionUser.instanceRole : 'ADMIN',
+        joinedProjectId: invite.projectId || null,
+      });
+    }
+
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
@@ -109,29 +195,20 @@ router.post('/invites/:token/redeem', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters.' });
     }
 
-    const invite = await prisma.invite.findUnique({ where: { token: req.params.token } });
-
-    if (!invite) return res.status(404).json({ error: 'This invite link is not valid.' });
-    if (invite.usedAt) return res.status(410).json({ error: 'This invite has already been used.' });
-    if (invite.expiresAt && invite.expiresAt < new Date()) {
-      return res.status(410).json({ error: 'This invite has expired.' });
-    }
-
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      // Not handled yet: an existing user redeeming a second invite to join
-      // another project. That merge needs real login to exist first, so
-      // someone can prove they own that account — refusing cleanly for now
-      // rather than silently doing something wrong.
+      // A real account with this email exists but isn't the one making this
+      // request (no session cookie, or it didn't check out) — send them to
+      // log in first, then reopen this same invite link so the branch above
+      // can attach it to that account instead of trying to create a new one.
       return res.status(409).json({
-        error:
-          'An account with this email already exists. Log in instead (not built yet) rather than signing up again.',
+        accountExists: true,
+        error: 'An account with this email already exists. Log in, then open this invite link again to join.',
       });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const INVITE_TAKEN = Symbol('invite-already-used');
     let user;
     try {
       user = await prisma.$transaction(async (tx) => {
@@ -180,7 +257,8 @@ router.post('/invites/:token/redeem', authLimiter, async (req, res) => {
       // up front, instead of a raw 500.
       if (e && e.code === 'P2002') {
         return res.status(409).json({
-          error: 'An account with this email already exists. Log in instead (not built yet) rather than signing up again.',
+          accountExists: true,
+          error: 'An account with this email already exists. Log in, then open this invite link again to join.',
         });
       }
       throw e;

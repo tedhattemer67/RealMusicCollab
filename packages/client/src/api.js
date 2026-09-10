@@ -15,7 +15,12 @@ async function request(path, options = {}) {
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error(data?.error || `Request failed: ${res.status}`);
+    const err = new Error(data?.error || `Request failed: ${res.status}`);
+    // Carries any extra fields a route sent alongside `error` (e.g. invite
+    // redeem's `accountExists`) so a caller can branch on more than the
+    // message text without a second round trip.
+    err.data = data;
+    throw err;
   }
   return data;
 }

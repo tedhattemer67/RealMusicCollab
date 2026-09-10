@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { login } from '../api';
 import './Login.css';
 
@@ -9,6 +9,12 @@ export default function Login({ onLoggedIn }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Set by RedeemInvite when an existing account needs to log in before it
+  // can retry redeeming an invite — send them back to finish that instead
+  // of dropping them at the project list.
+  const next = searchParams.get('next');
+  const redirectTarget = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -17,7 +23,7 @@ export default function Login({ onLoggedIn }) {
     try {
       const user = await login(email, password);
       onLoggedIn(user);
-      navigate('/');
+      navigate(redirectTarget);
     } catch (err) {
       setError(err.message);
     } finally {
