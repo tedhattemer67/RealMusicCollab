@@ -157,10 +157,20 @@ async function getReadStream(storageConfig, key) {
 // Returns a short-lived signed URL for adapters that support handing the
 // browser a direct link (S3), or null for adapters that don't (LOCAL) — the
 // caller falls back to proxying via getReadStream when this returns null.
-async function getRedirectUrl(storageConfig, key) {
+// Pass downloadFilename to make S3 itself respond with a real
+// Content-Disposition: attachment (and a human filename) instead of playing
+// the file back inline — the presigned URL carries that override, so it
+// still applies even though the browser talks to S3 directly, not to us.
+async function getRedirectUrl(storageConfig, key, { downloadFilename } = {}) {
   if (storageConfig.type !== 'S3') return null;
   const client = getS3Client(storageConfig.settings);
-  const command = new GetObjectCommand({ Bucket: storageConfig.settings.bucket, Key: key });
+  const command = new GetObjectCommand({
+    Bucket: storageConfig.settings.bucket,
+    Key: key,
+    ...(downloadFilename && {
+      ResponseContentDisposition: `attachment; filename="${downloadFilename}"`,
+    }),
+  });
   return getSignedUrl(client, command, { expiresIn: 60 * 5 }); // 5 minutes
 }
 

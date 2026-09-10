@@ -7,23 +7,9 @@ const { MEMBER_ROLES } = require('../lib/roles');
 const { getReadStream } = require('../storage');
 const { recordEvent } = require('../lib/events');
 const { exportLimiter } = require('../middleware/rateLimit');
+const { sanitizeExportSegment } = require('../lib/filenameSegment');
 
 const router = express.Router();
-
-// song.title / track.name / project.name are free-text and flow straight
-// into a Content-Disposition header value and into ZIP entry names below —
-// sanitize each one as an individual path SEGMENT (strip slashes/backslashes
-// so a crafted name can't inject an extra path level; strip control
-// characters and the quote character that would break filename="...";
-// collapse a segment that's now just dots so it can't act as a zip-slip
-// "../" traversal once joined with the "/"s this code controls itself).
-function sanitizeExportSegment(segment) {
-  const cleaned = String(segment)
-    .replace(/[/\\]/g, '_')
-    .replace(/[\x00-\x1f\x7f"]/g, '')
-    .trim();
-  return /^\.*$/.test(cleaned) || cleaned === '' ? 'untitled' : cleaned;
-}
 
 // POST /api/songs/:songId/export
 // body: {

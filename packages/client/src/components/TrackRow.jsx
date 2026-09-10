@@ -5,6 +5,7 @@ import {
   getTakeApprovals,
   approveTake,
   getTakeStreamUrl,
+  getTakeDownloadUrl,
   setCurrentTake,
 } from '../api';
 import Badge from './Badge.jsx';
@@ -215,6 +216,16 @@ export default function TrackRow({ track, onUploaded, user, myRole }) {
         >
           {previewTakeId && previewTakeId === track.currentTake?.id ? 'Hide preview' : 'Preview'}
         </button>
+        {track.currentTake && (
+          <a
+            className="btn btn-ghost"
+            href={getTakeDownloadUrl(track.currentTake.id)}
+            download
+            title="Download this track's current take as a .wav — for pulling into your own DAW"
+          >
+            Download
+          </a>
+        )}
         {track.currentTake &&
           canApprove &&
           (myApproval ? (
@@ -287,6 +298,9 @@ export default function TrackRow({ track, onUploaded, user, myRole }) {
                     <button className="btn btn-ghost" onClick={() => togglePreview(t.id)}>
                       {previewTakeId === t.id ? 'Hide' : 'Preview'}
                     </button>
+                    <a className="btn btn-ghost" href={getTakeDownloadUrl(t.id)} download>
+                      Download
+                    </a>
                     {canApprove &&
                       (iApproved ? (
                         <span className="text-muted" style={{ fontSize: 12 }}>✓ approved</span>

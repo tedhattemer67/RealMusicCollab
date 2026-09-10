@@ -270,6 +270,10 @@ export function getTakeStreamUrl(takeId) {
   return `${BASE}/takes/${takeId}/stream`;
 }
 
+export function getTakeDownloadUrl(takeId) {
+  return `${BASE}/takes/${takeId}/download`;
+}
+
 export function getMixStreamUrl(mixId) {
   return `${BASE}/mixes/${mixId}/stream`;
 }

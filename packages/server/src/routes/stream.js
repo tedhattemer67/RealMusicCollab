@@ -7,6 +7,8 @@ const requireRole = require('../middleware/requireRole');
 const { MEMBER_ROLES, canSeeDraftTakes } = require('../lib/roles');
 const { fromTakeParam, fromMixParam } = require('../lib/scope');
 const { LOCAL_ROOT, getRedirectUrl } = require('../storage');
+const { recordEvent } = require('../lib/events');
+const { sanitizeExportSegment } = require('../lib/filenameSegment');
 
 const router = express.Router();
 
@@ -14,7 +16,7 @@ const router = express.Router();
 // seeking within audio, and some won't play back at all without it. Only
 // needed for LOCAL: an S3 presigned URL already supports Range requests
 // natively, since the browser talks directly to S3 for those.
-function streamLocalFile(req, res, absolutePath) {
+function streamLocalFile(req, res, absolutePath, { downloadFilename } = {}) {
   if (!fs.existsSync(absolutePath)) {
     return res.status(404).json({ error: 'File not found on disk.' });
   }
@@ -24,6 +26,9 @@ function streamLocalFile(req, res, absolutePath) {
 
   res.setHeader('Content-Type', 'audio/wav');
   res.setHeader('Accept-Ranges', 'bytes');
+  if (downloadFilename) {
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+  }
 
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
@@ -57,15 +62,15 @@ function streamLocalFile(req, res, absolutePath) {
 // supports one (S3 — faster, and doesn't route audio bytes through this
 // server at all), otherwise proxy directly from disk (LOCAL, which has no
 // concept of a URL to redirect to).
-async function streamOrRedirect(req, res, storageConfig, storageKey) {
-  const redirectUrl = await getRedirectUrl(storageConfig, storageKey);
+async function streamOrRedirect(req, res, storageConfig, storageKey, options = {}) {
+  const redirectUrl = await getRedirectUrl(storageConfig, storageKey, options);
   if (redirectUrl) {
     return res.redirect(302, redirectUrl);
   }
 
   if (storageConfig.type === 'LOCAL') {
     const absolutePath = path.join(LOCAL_ROOT, storageKey);
-    return streamLocalFile(req, res, absolutePath);
+    return streamLocalFile(req, res, absolutePath, options);
   }
 
   res.status(501).json({
@@ -91,6 +96,40 @@ router.get('/takes/:takeId/stream', requireAuth, requireRole(MEMBER_ROLES, fromT
     console.error(err);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Something went wrong streaming the take.' });
+    }
+  }
+});
+
+// GET /api/takes/:takeId/download — same access rule as /stream, but forces
+// a real file download (Content-Disposition: attachment) with a human
+// filename instead of playing back inline, for pulling one track's current
+// take straight into a DAW without exporting the whole song.
+router.get('/takes/:takeId/download', requireAuth, requireRole(MEMBER_ROLES, fromTakeParam, { notFoundOnNoAccess: true }), async (req, res) => {
+  try {
+    const take = await prisma.take.findUnique({
+      where: { id: req.params.takeId },
+      include: { storageConfig: true, track: { include: { song: true } } },
+    });
+    if (!take || (!take.readyForFeedback && !canSeeDraftTakes(req.effectiveRole))) {
+      return res.status(404).json({ error: `No take found with id ${req.params.takeId}.` });
+    }
+
+    const trackName = sanitizeExportSegment(take.track.name).replace(/\s+/g, '');
+    const filename = `${trackName}_Take${take.takeNumber}.wav`;
+    await streamOrRedirect(req, res, take.storageConfig, take.storageKey, { downloadFilename: filename });
+
+    await recordEvent({
+      action: 'DOWNLOAD_TRACK',
+      actorId: req.user.id,
+      entityType: 'Take',
+      entityId: take.id,
+      projectId: take.track.song.projectId,
+      message: `${req.user.name} downloaded "${take.track.name}" (Take ${take.takeNumber}) from "${take.track.song.title}".`,
+    });
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Something went wrong downloading the take.' });
     }
   }
 });
