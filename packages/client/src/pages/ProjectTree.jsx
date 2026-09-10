@@ -44,7 +44,7 @@ function SongStatusBadge({ status }) {
 
 // Freeze/unfreeze — each song needs its own independent state, same
 // reasoning as the mix-related components extracted into their own files.
-function FreezeControl({ song, user, onChange }) {
+function FreezeControl({ song, myRole, onChange }) {
   const [openRequest, setOpenRequest] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -68,7 +68,13 @@ function FreezeControl({ song, user, onChange }) {
     }
   }, [song.status, loadRequests]);
 
-  const isAdmin = user && user.instanceRole === 'ADMIN';
+  // Matches the server's requireRole(['ADMIN'], { songId }) on freeze/resolve
+  // (songs.js): effective role at this song's project scope, which a
+  // project-level ADMIN Membership satisfies just as much as an instance
+  // ADMIN (getEffectiveRole resolves both to 'ADMIN') — not instanceRole,
+  // which would hide the button from a project admin who isn't also an
+  // instance admin even though the API lets them freeze.
+  const isAdmin = myRole === 'ADMIN';
 
   async function handleFreeze() {
     setBusy(true);
@@ -391,7 +397,7 @@ export default function ProjectTree({ user }) {
                   <BatchUploadForm songId={selectedSong.id} projectId={projectId} tracks={selectedSong.tracks} onUploaded={load} />
                 )}
                 <DownloadPanel songId={selectedSong.id} />
-                <FreezeControl song={selectedSong} user={user} onChange={load} />
+                <FreezeControl song={selectedSong} myRole={project.myRole} onChange={load} />
               </div>
             </div>
 
